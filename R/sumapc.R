@@ -106,7 +106,31 @@
   } else return(clusters)
 }
 
-umap_dbs_clust<-function(data, maxevts, maxlvl, minpts, clust_options, multi_thread = T, fast_sgd = TRUE, ret_model = F, myqueue = NULL, verbose = F) {
+#' Sequential UMAP 2d embedding and simple 2d space partitioning clustering.
+#'
+#' @param data a data matrix.
+#' @param maxevts max number of random points to apply UMAP.
+#' @param maxlvl max sequential levels to process.
+#' @param minpts min cluster size.
+#' @param clust_options list; 2d clustering options (see Details).
+#' @param multi_thread logical.
+#' @param fast_sgd logical; see \link[uwot]{umap}.
+#' @param ret_model logical; should clustering model be exported.
+#' @param myqueue shinyQueue object. Multithreaded code use \link[future]{future} package. This object is used to send log messages to the base worker.
+#' @param verbose logical.
+#'
+#' @details clust_options must be a named list containing:
+#'  method: one of "dbscan", "hdbscan", "kdbscan", "sdbscan"
+#'  mineps: min eps value passed to dbscan
+#'  mindens: min density passed to kdbscan
+#'  bw: bw passed to sdbscan
+#'  nbins: min number of bins of bw width
+#'  mvpratio: max valley/peak ratio)
+#'
+#' @return A vector of cluster numbers with length = nrow(data)
+#' @import grDevices graphics stats utils future
+#' @export
+umap_dbs_clust<-function(data, maxevts = 10000L, maxlvl = 3L, minpts = 100L, clust_options, multi_thread = T, fast_sgd = TRUE, ret_model = F, myqueue = NULL, verbose = F) {
   if (ret_model) {
     if (!(clust_options$method %in% c("sdbscan", "kdbscan"))) stop("ret_model needs sdbscan or kdbscan clustering method!", call. = F)
   }
@@ -144,14 +168,24 @@ umap_dbs_clust<-function(data, maxevts, maxlvl, minpts, clust_options, multi_thr
   return(clust)
 }
 
-predict.UMAP_s2dcluster<-function(res, newdata, multi_thread = T, verbose = F) {
-  if (!inherits(res, "UMAP_s2dcluster")) stop("res must be a UMAP_s2dcluster result object!", call. = F)
-  if (!is.matrix(newdata) || ncol(newdata) != res$model$data_columns || nrow(newdata) < 1) stop(paste0("newdata must be a matrix with ", res$model$data_columns, " columns and >0 rows!"), call. = F)
+#' Predict clusters based on a UMAP_s2dcluster model
+#'
+#' @param object UMAP_s2dcluster model.
+#' @param newdata a data matrix.
+#' @param multi_thread logical.
+#' @param verbose logical.
+#' @param ... NOT USED.
+#'
+#' @return A vector of cluster numbers with length = nrow(data)
+#' @export
+predict.UMAP_s2dcluster<-function(object, newdata, multi_thread = T, verbose = F, ...) {
+  if (!inherits(object, "UMAP_s2dcluster")) stop("object must be a UMAP_s2dcluster result object!", call. = F)
+  if (!is.matrix(newdata) || ncol(newdata) != object$model$data_columns || nrow(newdata) < 1) stop(paste0("newdata must be a matrix with ", object$model$data_columns, " columns and >0 rows!"), call. = F)
   cluster<-c()
-  if (length(res$clusters) > 1) {
-    cluster<-.UMAP_s2dcluster_newdata(newdata, res$model, multi_thread = multi_thread, verbose = verbose)
+  if (length(object$clusters) > 1) {
+    cluster<-.UMAP_s2dcluster_newdata(newdata, object$model, multi_thread = multi_thread, verbose = verbose)
   } else cluster<-rep("cluster", nrow(newdata))
-  clusters<-unname(res$clusters[cluster])
+  clusters<-unname(object$clusters[cluster])
   return(clusters)
 }
 
@@ -167,6 +201,12 @@ predict.UMAP_s2dcluster<-function(res, newdata, multi_thread = T, verbose = F) {
   return(model)
 }
 
+#' Save UMAP_s2dcluster model to file
+#'
+#' @param res UMAP_s2dcluster model.
+#' @param file filename.
+#'
+#' @export
 save_model<-function(res, file) {
   if (!inherits(res, "UMAP_s2dcluster")) stop("res must be a UMAP_s2dcluster result object!", call. = F)
   writeaccess<-tryCatch({
@@ -292,12 +332,37 @@ save_model<-function(res, file) {
   } else return(clusters)
 }
 
+#' Sequential UMAP 2d embedding and simple 2d space partitioning clustering (CUML accelerated version).
+#'
+#' @param data a data matrix.
+#' @param maxevts max number of random points to apply UMAP.
+#' @param maxlvl max sequential levels to process.
+#' @param minpts min cluster size.
+#' @param clust_options list; 2d clustering options (see Details).
+#' @param ret_model logical; should clustering model be exported.
+#' @param myqueue shinyQueue object. Multithreaded code use \link[future]{future} package. This object is used to send log messages to the base worker.
+#' @param verbose logical.
+#'
+#' @details clust_options must be a named list containing:
+#'  method: one of "dbscan", "hdbscan", "kdbscan", "sdbscan"
+#'  mineps: min eps value passed to dbscan
+#'  mindens: min density passed to kdbscan
+#'  bw: bw passed to sdbscan
+#'  nbins: min number of bins of bw width
+#'  mvpratio: max valley/peak ratio)
+#'
+#' @return A vector of cluster numbers with length = nrow(data)
+#' @import grDevices graphics stats utils future
+#' @export
 cuml_umap_dbs_clust<-function(data, maxevts, maxlvl, minpts, clust_options, ret_model = F, myqueue = NULL, verbose = F) {
   ret_model<-F # hardcode ret_model until implemented!
   if (ret_model) {
     if (!(clust_options$method %in% c("sdbscan", "kdbscan"))) stop("ret_model needs sdbscan or kdbscan clustering method!", call. = F)
   }
-  cuml<-reticulate::import("cuml")
+  if (requireNamespace("reticulate", quietly = T)) {
+    cuml<-try(reticulate::import("cuml"), silent = T)
+    if (inherits(cuml, "try-error")) stop("CUML is needed!!!", call. = F)
+  } else stop("CUML is needed!!!", call. = F)
   clusters<-.cuml_umap_dbs_clust(data = data, maxevts = maxevts, maxlvl = maxlvl, minpts = minpts, clust_options = clust_options, ret_model = ret_model, myqueue = myqueue, verbose = verbose, cuml = cuml)
   if (ret_model) {
     clusters_model<-clusters$model
@@ -324,7 +389,7 @@ cuml_umap_dbs_clust<-function(data, maxevts, maxlvl, minpts, clust_options, ret_
   plot.s2dcluster(model$s2dcluster_model, embdata, main = model$cluster, xlab="", ylab="", ...)
   clusts<-predict.s2dcluster(model$s2dcluster_model, embdata)
   clusters<-sort(unique(clusts))
-  opar <- par(fig=c(0, 1, 0, 0.1), oma=c(0, 0, 0, 0), 
+  opar <- par(fig=c(0, 1, 0, 0.1), oma=c(0, 0, 0, 0),
               mar=c(0, 0, 0, 0), new=TRUE)
   plot(0, 0, type='n', bty='n', xaxt='n', yaxt='n')
   legend("bottom", legend = paste0(model$cluster, "_", clusters), pt.cex = 1.5,
@@ -339,10 +404,17 @@ cuml_umap_dbs_clust<-function(data, maxevts, maxlvl, minpts, clust_options, ret_
 }
 
 
-plot.UMAP_s2dcluster<-function(res, data = NULL, ...) {
-  if (!inherits(res, "UMAP_s2dcluster")) stop("res must be a UMAP_s2dcluster result object!", call. = F)
-  if (!is.null(data)) if (!is.matrix(data) || ncol(data) != res$model$data_columns || nrow(data) < 1) stop(paste0("data must be a matrix with ", res$model$data_columns, " columns and >0 rows!"), call. = F)
-  .plot.UMAP_s2dcluster_model(res$model, data, ...)
+#' Plot UMAP_s2dcluster model data.
+#'
+#' @param x UMAP_s2dcluster
+#' @param data a data matrix. If NULL uses model data.
+#' @param ... arguments passed to plot.s2dcluster
+#'
+#' @export
+plot.UMAP_s2dcluster<-function(x, data = NULL, ...) {
+  if (!inherits(x, "UMAP_s2dcluster")) stop("x must be a UMAP_s2dcluster result object!", call. = F)
+  if (!is.null(data)) if (!is.matrix(data) || ncol(data) != x$model$data_columns || nrow(data) < 1) stop(paste0("data must be a matrix with ", x$model$data_columns, " columns and >0 rows!"), call. = F)
+  .plot.UMAP_s2dcluster_model(x$model, data, ...)
 }
 
 #### simple 2d clustering methods for data with sparse dense clusters ####
@@ -418,9 +490,21 @@ plot.UMAP_s2dcluster<-function(res, data = NULL, ...) {
   if (ret_model) {
     return(list(cluster = clust, model = clmodel))
   } else return(clust)
-  
+
 }
 
+#' Kernel density based 2d clustering.
+#'
+#' @param x a data matrix.
+#' @param minpts min cluster size.
+#' @param mindens density cutoff.
+#' @param maxlvl max sequential level of space partitioning.
+#' @param alfa numeric. Exclude alfa portion of each extremity before search for a cut point in density curve.
+#' @param theta integer. Angle of rotation in each step.
+#' @param ret_model logical.
+#'
+#' @return A vector with cluster numbers. Length = nrow(x)
+#' @export
 kdbscan<-function(x, minpts = 100, mindens = 0.001, maxlvl = 100, alfa = 0.05, theta = 5, ret_model = F) {
   clusters<-.kdbscan(x, minpts = minpts, mindens = mindens, maxlvl = maxlvl, theta = theta, ret_model = ret_model)
   if (ret_model) {
@@ -449,7 +533,7 @@ getdensdata<-function(x2, axis, minpts) {
   return(c(v$minimum, v$objective, p1$objective, p2$objective))
 }
 
-.sdbscan<-function(x, minpts = 100, level = 1, idxs = 1:nrow(x)>0, cluster = "root", maxlvl = 100, alfa = 0.05, bw = 0.25, nbins = 1, theta = 5, mvpratio = 0.01, ret_model = F, plotcuts = F) {
+.sdbscan<-function(x, minpts = 100, level = 1, idxs = 1:nrow(x)>0, cluster = "root", maxlvl = 100, alfa = 0.05, bw = 0.25, nbins = 1, theta = 5, mvpratio = 0.5, ret_model = F, plotcuts = F) {
   cut_x<-NULL
   vdata<-c()
   for (.theta in seq(0, 90, theta)) {
@@ -509,7 +593,7 @@ getdensdata<-function(x2, axis, minpts) {
         cut_axis<-v_cut$axis
         cut_angle<-v_cut$angle
         break
-      } 
+      }
       if (is.null(cut_x)) {
         if (ret_model){
           return(list(cluster = rep(cluster, nrow(x[idxs,])), model = list(cluster="none")))
@@ -523,7 +607,7 @@ getdensdata<-function(x2, axis, minpts) {
   }
   clust<-rep(paste0(cluster, "_1"), nrow(x[idxs,]))
   clust[x2[idxs,cut_axis] > cut_x]<-paste0(cluster, "_2")
-  if (plotcuts) sdbscan_hist(x2[idxs,], bw = bw, cut_axis=cut_axis, cut_x=cut_x, cex=2, pch = ".", 
+  if (plotcuts) sdbscan_hist(x2[idxs,], bw = bw, cut_axis=cut_axis, cut_x=cut_x, cex=2, pch = ".",
                              main = paste0(cluster, " angle = ", cut_angle*180/pi),
                              cex.main = 0.8,
                              col=factor(clust))
@@ -561,7 +645,22 @@ getdensdata<-function(x2, axis, minpts) {
   } else return(clust)
 }
 
-sdbscan<-function(x, minpts = 100, maxlvl = 100, alfa = 0.05, bw = 0.25, nbins = 1, theta = 5, mvpratio = 0.01, ret_model = F, plotcuts = F) {  ### TODO: check parameters
+#' Simple density based 2d clustering.
+#'
+#' @param x a data matrix.
+#' @param minpts min cluster size.
+#' @param maxlvl max sequential level of space partitioning.
+#' @param alfa numeric. Exclude alfa portion of each extremity before search for a cut point in density curve.
+#' @param bw bin width.
+#' @param nbins min number of bins to search.
+#' @param theta integer. Angle of rotation in each step.
+#' @param mvpratio max valley/peaks value to allow cut.
+#' @param ret_model logical.
+#' @param plotcuts logical; plot data with histograms and cut point.
+#'
+#' @return A vector with cluster numbers. Length = nrow(x)
+#' @export
+sdbscan<-function(x, minpts = 100, maxlvl = 100, alfa = 0.05, bw = 0.25, nbins = 1, theta = 5, mvpratio = 0.5, ret_model = F, plotcuts = F) {  ### TODO: check parameters
   clusters<-.sdbscan(x, minpts = minpts, maxlvl = maxlvl, alfa = alfa, bw = bw, nbins = nbins, theta = theta, mvpratio = mvpratio, ret_model = ret_model, plotcuts = plotcuts)
   if (ret_model) {
     clusters_model<-clusters$model
@@ -595,7 +694,7 @@ sdbscan<-function(x, minpts = 100, maxlvl = 100, alfa = 0.05, bw = 0.25, nbins =
     interminus<-matrix(inter[inter[,2]<=min(interx[,2]),], ncol = 2)
     interplus<-matrix(inter[inter[,2]>=max(interx[,2]),], ncol = 2)
     dtr<-rbind(interminus[nrow(interminus),], interplus[1,])
-    
+
   } else {
     inter<-inter[order(inter[,1]),]
     interminus<-matrix(inter[inter[,1]<=min(interx[,1]),], ncol = 2)
@@ -622,31 +721,45 @@ sdbscan<-function(x, minpts = 100, maxlvl = 100, alfa = 0.05, bw = 0.25, nbins =
   }
 }
 
-plot.s2dcluster<-function(res, x = NULL, cex=2, ...) {
-  if (!inherits(res, "s2dcluster")) stop("res must be a s2dcluster result object!", call. = F)
-  if (is.null(x)) {
-    x<-try(eval(res$x), silent = T)
-    if (!is.matrix(x) || ncol(x) != 2 || nrow(x) < 1) stop("x must be a matrix with 2 columns and >0 rows!", call. = F)
-    col<-res$cluster
+#' Plot s2dcluster model
+#'
+#' @param x s2dcluster model
+#' @param data a data matrix. Original data saved in model used if NULL.
+#' @param cex point size,
+#' @param ... arguments passed to plot.xy
+#'
+#' @export
+plot.s2dcluster<-function(x, data = NULL, cex=2, ...) {
+  if (!inherits(x, "s2dcluster")) stop("x must be a s2dcluster result object!", call. = F)
+  if (is.null(data)) {
+    data<-try(eval(x$x), silent = T)
+    if (!is.matrix(data) || ncol(data) != 2 || nrow(data) < 1) stop("data must be a matrix with 2 columns and >0 rows!", call. = F)
+    col<-x$cluster
   } else {
-    if (!is.matrix(x) || ncol(x) != 2 || nrow(x) < 1) stop("x must be a matrix with 2 columns and >0 rows!", call. = F)
-    col<-predict.s2dcluster(res, as.matrix(x, ncol=2))
+    if (!is.matrix(data) || ncol(data) != 2 || nrow(data) < 1) stop("data must be a matrix with 2 columns and >0 rows!", call. = F)
+    col<-predict.s2dcluster(x, as.matrix(data, ncol=2))
   }
-  plot(x, pch=".", cex=cex, col=col, ...)
-  if (res$model$cluster != "none") {
-    .plot_model(x, res, res$model, make_box(10*(max(abs(c(range(x[,1]), range(x[,2])))))))
+  plot(data, pch=".", cex=cex, col=col, ...)
+  if (x$model$cluster != "none") {
+    .plot_model(data, x, x$model, make_box(10*(max(abs(c(range(data[,1]), range(data[,2])))))))
   }
 }
 
-print.s2dcluster<-function(res) {
-  if (!inherits(res, "s2dcluster")) stop("res must be a s2dcluster result object!", call. = F)
+#' Print s2dcluster information.
+#'
+#' @param x s2dcluster model
+#' @param ... NOT USED
+#'
+#' @export
+print.s2dcluster<-function(x, ...) {
+  if (!inherits(x, "s2dcluster")) stop("x must be a s2dcluster result object!", call. = F)
   cat("s2dcluster result object.\n")
-  cat("Data file:", res$x, "with", length(res$cluster), "points.\n")
-  cat("Found", length(res$clusters), "clusters.\n")
+  cat("Data file:", x$x, "with", length(x$cluster), "points.\n")
+  cat("Found", length(x$clusters), "clusters.\n")
   cat("Cluster table:")
-  print(table(res$cluster))
+  print(table(x$cluster))
   cat("Cluster hierarchy:\n")
-  cltable<-data.frame(Cluster = res$clusters[order(names(res$clusters))])
+  cltable<-data.frame(Cluster = x$clusters[order(names(x$clusters))])
   print(cltable)
 }
 
@@ -666,14 +779,22 @@ print.s2dcluster<-function(res) {
   return(clust)
 }
 
-predict.s2dcluster<-function(res, newdata) {
-  if (!inherits(res, "s2dcluster")) stop("res must be a s2dcluster result object!", call. = F)
+#' Predict clusters based on s2dcluster model.
+#'
+#' @param object s2dcluster model.
+#' @param newdata a data matrix.
+#' @param ... NOT USED
+#'
+#' @return A vector of cluster numbers.
+#' @export
+predict.s2dcluster<-function(object, newdata, ...) {
+  if (!inherits(object, "s2dcluster")) stop("object must be a s2dcluster result object!", call. = F)
   if (!is.matrix(newdata) || ncol(newdata) != 2 || nrow(newdata) < 1) stop("newdata must be a matrix with 2 columns and >0 rows!", call. = F)
   cluster<-c()
-  if (res$model$cluster != "none") {
-    cluster<-.s2dcluster_newdata(newdata, res$model)
+  if (object$model$cluster != "none") {
+    cluster<-.s2dcluster_newdata(newdata, object$model)
   } else cluster<-rep("root", nrow(newdata))
-  clusters<-unname(res$clusters[cluster])
+  clusters<-unname(object$clusters[cluster])
   return(clusters)
 }
 
@@ -689,12 +810,12 @@ get_intersection<-function(line, cut, onsegment = FALSE) {
   diffcut[abs(diffcut)<1e-5]<-0
   detall<-det(rbind(diffline, diffcut))
   if (detall == 0) return(c(Inf, Inf))
-  
+
   det1<-det(line)
   det2<-det(cut)
-  x<-det(matrix(c(det1, diffline[1], 
+  x<-det(matrix(c(det1, diffline[1],
                   det2, diffcut[1]), ncol = 2, byrow = T))/detall
-  y<-det(matrix(c(det1, diffline[2], 
+  y<-det(matrix(c(det1, diffline[2],
                   det2, diffcut[2]), ncol = 2, byrow = T))/detall
   if (onsegment) {
     if (!(
@@ -750,9 +871,9 @@ sdbscan_hist<-function(x, xlab="", ylab="", bw, cut_axis, cut_x, ...){
   par(mar=c(3,0,1,1))
   barplot(yhist$counts, axes=FALSE, xlim=c(0, max(yhist$counts)), space=0, horiz=TRUE)
   par(oma=c(3,3,0,0))
-  mtext(xlab, side=1, line=1, outer=TRUE, adj=0, 
+  mtext(xlab, side=1, line=1, outer=TRUE, adj=0,
         at=.8 * (mean(x[,1]) - min(x[,1]))/(max(x[,1])-min(x[,1])))
-  mtext(ylab, side=2, line=1, outer=TRUE, adj=0, 
+  mtext(ylab, side=2, line=1, outer=TRUE, adj=0,
         at=(.8 * (mean(x[,2]) - min(x[,2]))/(max(x[,2]) - min(x[,2]))))
   par(oldpar)
 }
