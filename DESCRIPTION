@@ -1,0 +1,15 @@
+Package: sumapc
+Type: Package
+Title: Sequential UMAP Clustering
+Version: 0.1.0
+Authors@R: person("Sérgio", "Fortier", email = "sergiofortier@gmail.com",
+  role = c("aut", "cre"))
+Maintainer: Sérgio Fortier <sergiofortier@gmail.com>
+Description: Use of sequential UMAP for 2d embedding and simple 2d space partitioning for clustering.
+License: GPL-3
+Encoding: UTF-8
+LazyData: true
+RoxygenNote: 7.1.2
+Depends: future
+Imports: FNN, RcppParallel, dbscan, uwot
+Suggests: reticulate
