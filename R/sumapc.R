@@ -91,7 +91,7 @@
       if (ret_model) {
         tempclust<-get(paste0("nclust", c))
         clusters[clusters == c]<-tempclust$cluster
-        if (length(unique(tempclust$cluster)) > 1) newmodels[[c]]<-tempclust$model
+        newmodels[[c]]<-tempclust$model
       } else clusters[clusters == c]<-get(paste0("nclust", c))
     }
   } else if (!is.null(myqueue)) myqueue$producer$fireAssignReactive("umap_dbs_msg", paste0("Found only 1 cluster on ", clust, " (level ", lvl, ") or no deeper level allowed. Skipping deeper levels on this cluster."))
@@ -100,7 +100,7 @@
     umap_file<-tempfile()
     uwot::save_uwot(umap_model, umap_file)
     thismodel<-list(cluster = clust, data_columns = ncol(data), maxevts = maxevts, maxlvl = maxlvl, minpts = minpts, clust_options = clust_options)
-    if (length(unique(clusters)) > 1) thismodel<-c(thismodel, list(umap_file = umap_file, umap_sample = datasample, s2dcluster_model = cl_model))
+    thismodel<-c(thismodel, list(umap_file = umap_file, umap_sample = datasample, s2dcluster_model = cl_model))
     if (length(newmodels) > 0) thismodel<-c(thismodel, newmodels)
     return(list(cluster = clusters, model = thismodel))
   } else return(clusters)
@@ -160,7 +160,7 @@ umap_dbs_clust<-function(data, maxevts = 10000L, maxlvl = 3L, minpts = 100L, clu
   new_clusters<-unique(clust)
   for (c in new_clusters) {
     c<-c
-    if (is.null(model[[c]])) next
+    if (length(model[[c]]$s2dcluster_model$clusters) == 1 || is.null(model[[c]]$s2dcluster_model)) next
     idxs<-clust == c
     nclust<-.UMAP_s2dcluster_newdata(x[idxs,], model[[c]], multi_thread = multi_thread, verbose = verbose)
     clust[idxs]<-nclust
@@ -194,7 +194,7 @@ predict.UMAP_s2dcluster<-function(object, newdata, multi_thread = T, verbose = F
   file.copy(model$umap_file, modelfile, overwrite = T)
   model$umap_file<-modelfile
   for (i in paste0(model$cluster, "_", model$s2dcluster_model$clusters)) {
-    if (!is.null(model[[i]])) {
+    if (!is.null(model[[clust]]$umap_file)) {
       model[[i]]<-.save_model(model[[i]], modeldir)
     }
   }
@@ -397,7 +397,7 @@ cuml_umap_dbs_clust<-function(data, maxevts, maxlvl, minpts, clust_options, ret_
   par(opar)
   for (i in clusters) {
     clust<-paste0(model$cluster, "_", i)
-    if (!is.null(model[[clust]])) {
+    if (!is.null(model[[clust]]$umap_file)) {
       .plot.UMAP_s2dcluster_model(model[[clust]], data[clusts == i,], ...)
     }
   }
