@@ -4,12 +4,12 @@
   knn_needed<-FALSE
   if (!is.matrix(data[idxs,])) {
     if (ret_model){
-      return(list(cluster = rep(clust, 1), model = list(cluster = clust, data_columns = length(data), maxevts = maxevts, maxlvl = maxlvl, minpts = minpts, clust_options = clust_options)))
+      return(list(cluster = rep(clust, 1), model = list(cluster = clust, data_columns = length(data), maxevts = maxevts, maxlvl = maxlvl, minpts = minpts, clust_options = clust_options, cuml = F)))
     } else return(rep(clust, 1))
   }
   if (nrow(data[idxs,]) <= minpts) {
     if (ret_model){
-      return(list(cluster = rep(clust, nrow(data[idxs,])), model = list(cluster = clust, data_columns = ncol(data), maxevts = maxevts, maxlvl = maxlvl, minpts = minpts, clust_options = clust_options)))
+      return(list(cluster = rep(clust, nrow(data[idxs,])), model = list(cluster = clust, data_columns = ncol(data), maxevts = maxevts, maxlvl = maxlvl, minpts = minpts, clust_options = clust_options, cuml = F)))
     } else return(rep(clust, nrow(data[idxs,])))
   }
   if (nrow(data[idxs,])>maxevts) {
@@ -99,7 +99,7 @@
   if (ret_model) {
     umap_file<-tempfile()
     uwot::save_uwot(umap_model, umap_file)
-    thismodel<-list(cluster = clust, data_columns = ncol(data), maxevts = maxevts, maxlvl = maxlvl, minpts = minpts, clust_options = clust_options)
+    thismodel<-list(cluster = clust, data_columns = ncol(data), maxevts = maxevts, maxlvl = maxlvl, minpts = minpts, clust_options = clust_options, cuml = F)
     thismodel<-c(thismodel, list(umap_file = umap_file, umap_sample = datasample, s2dcluster_model = cl_model))
     if (length(newmodels) > 0) thismodel<-c(thismodel, newmodels)
     return(list(cluster = clusters, model = thismodel))
@@ -146,12 +146,12 @@ umap_dbs_clust<-function(data, maxevts = 10000L, maxlvl = 3L, minpts = 100L, clu
   clusters<-unname(new_clusters[clusters])
   if (ret_model) {
     res<-list(cluster = clusters, clusters=new_clusters, model = clusters_model)
-    class(res)<-"UMAP_s2dcluster"
+    class(res)<-"sumapc"
     return(res)
   } else return(clusters)
 }
 
-.UMAP_s2dcluster_newdata<-function(x, model, multi_thread = T, verbose = F) {
+.sumapc_newdata<-function(x, model, multi_thread = T, verbose = F) {
   umap_model<-uwot::load_uwot(model$umap_file)
   embdata<-uwot::umap_transform(x, umap_model, n_threads = ifelse(multi_thread, RcppParallel::defaultNumThreads(), 1), verbose = verbose)
   s2dmodel<-model$s2dcluster_model
@@ -162,15 +162,15 @@ umap_dbs_clust<-function(data, maxevts = 10000L, maxlvl = 3L, minpts = 100L, clu
     c<-c
     if (length(model[[c]]$s2dcluster_model$clusters) == 1 || is.null(model[[c]]$s2dcluster_model)) next
     idxs<-clust == c
-    nclust<-.UMAP_s2dcluster_newdata(x[idxs,], model[[c]], multi_thread = multi_thread, verbose = verbose)
+    nclust<-.sumapc_newdata(x[idxs,], model[[c]], multi_thread = multi_thread, verbose = verbose)
     clust[idxs]<-nclust
   }
   return(clust)
 }
 
-#' Predict clusters based on a UMAP_s2dcluster model
+#' Predict clusters based on a sumapc model
 #'
-#' @param object UMAP_s2dcluster model.
+#' @param object sumapc model.
 #' @param newdata a data matrix.
 #' @param multi_thread logical.
 #' @param verbose logical.
@@ -178,12 +178,12 @@ umap_dbs_clust<-function(data, maxevts = 10000L, maxlvl = 3L, minpts = 100L, clu
 #'
 #' @return A vector of cluster numbers with length = nrow(data)
 #' @export
-predict.UMAP_s2dcluster<-function(object, newdata, multi_thread = T, verbose = F, ...) {
-  if (!inherits(object, "UMAP_s2dcluster")) stop("object must be a UMAP_s2dcluster result object!", call. = F)
+predict.sumapc<-function(object, newdata, multi_thread = T, verbose = F, ...) {
+  if (!inherits(object, "sumapc")) stop("object must be a sumapc result object!", call. = F)
   if (!is.matrix(newdata) || ncol(newdata) != object$model$data_columns || nrow(newdata) < 1) stop(paste0("newdata must be a matrix with ", object$model$data_columns, " columns and >0 rows!"), call. = F)
   cluster<-c()
   if (length(object$clusters) > 1) {
-    cluster<-.UMAP_s2dcluster_newdata(newdata, object$model, multi_thread = multi_thread, verbose = verbose)
+    cluster<-.sumapc_newdata(newdata, object$model, multi_thread = multi_thread, verbose = verbose)
   } else cluster<-rep("cluster", nrow(newdata))
   clusters<-unname(object$clusters[cluster])
   return(clusters)
@@ -201,14 +201,14 @@ predict.UMAP_s2dcluster<-function(object, newdata, multi_thread = T, verbose = F
   return(model)
 }
 
-#' Save UMAP_s2dcluster model to file
+#' Save sumapc model to file
 #'
-#' @param res UMAP_s2dcluster model.
+#' @param res sumapc model.
 #' @param file filename.
 #'
 #' @export
 save_model<-function(res, file) {
-  if (!inherits(res, "UMAP_s2dcluster")) stop("res must be a UMAP_s2dcluster result object!", call. = F)
+  if (!inherits(res, "sumapc")) stop("res must be a sumapc result object!", call. = F)
   writeaccess<-tryCatch({
     suppressWarnings(write.table(1, file))
   }, error=function(e) FALSE)
@@ -375,12 +375,12 @@ cuml_umap_dbs_clust<-function(data, maxevts, maxlvl, minpts, clust_options, ret_
   clusters<-unname(new_clusters[clusters])
   if (ret_model) {
     res<-list(cluster = clusters, clusters=new_clusters, model = clusters_model)
-    class(res)<-"UMAP_s2dcluster"
+    class(res)<-"sumapc"
     return(res)
   } else return(clusters)
 }
 
-.plot.UMAP_s2dcluster_model<-function(model, data, ...) {
+.plot.sumapc_model<-function(model, data, ...) {
   umap_model<-uwot::load_uwot(model$umap_file)
   if (is.null(data)) {
     embdata<-umap_model$embedding
@@ -398,23 +398,23 @@ cuml_umap_dbs_clust<-function(data, maxevts, maxlvl, minpts, clust_options, ret_
   for (i in clusters) {
     clust<-paste0(model$cluster, "_", i)
     if (!is.null(model[[clust]]$umap_file)) {
-      .plot.UMAP_s2dcluster_model(model[[clust]], data[clusts == i,], ...)
+      .plot.sumapc_model(model[[clust]], data[clusts == i,], ...)
     }
   }
 }
 
 
-#' Plot UMAP_s2dcluster model data.
+#' Plot sumapc model data.
 #'
-#' @param x UMAP_s2dcluster
+#' @param x sumapc
 #' @param data a data matrix. If NULL uses model data.
 #' @param ... arguments passed to plot.s2dcluster
 #'
 #' @export
-plot.UMAP_s2dcluster<-function(x, data = NULL, ...) {
-  if (!inherits(x, "UMAP_s2dcluster")) stop("x must be a UMAP_s2dcluster result object!", call. = F)
+plot.sumapc<-function(x, data = NULL, ...) {
+  if (!inherits(x, "sumapc")) stop("x must be a sumapc result object!", call. = F)
   if (!is.null(data)) if (!is.matrix(data) || ncol(data) != x$model$data_columns || nrow(data) < 1) stop(paste0("data must be a matrix with ", x$model$data_columns, " columns and >0 rows!"), call. = F)
-  .plot.UMAP_s2dcluster_model(x$model, data, ...)
+  .plot.sumapc_model(x$model, data, ...)
 }
 
 #### simple 2d clustering methods for data with sparse dense clusters ####
