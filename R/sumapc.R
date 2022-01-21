@@ -234,12 +234,12 @@ save_model<-function(res, file) {
   knn_needed<-FALSE
   if (!is.matrix(data[idxs,])) {
     if (ret_model){
-      return(list(cluster = rep(clust, 1), model = list(cluster = clust, data_columns = length(data), maxevts = maxevts, maxlvl = maxlvl, minpts = minpts, clust_options = clust_options)))
+      return(list(cluster = rep(clust, 1), model = list(cluster = clust, data_columns = length(data), maxevts = maxevts, maxlvl = maxlvl, minpts = minpts, clust_options = clust_options, cuml = T)))
     } else return(rep(clust, 1))
   }
   if (nrow(data[idxs,]) <= minpts) {
     if (ret_model){
-      return(list(cluster = rep(clust, nrow(data[idxs,])), model = list(cluster = clust, data_columns = ncol(data), maxevts = maxevts, maxlvl = maxlvl, minpts = minpts, clust_options = clust_options)))
+      return(list(cluster = rep(clust, nrow(data[idxs,])), model = list(cluster = clust, data_columns = ncol(data), maxevts = maxevts, maxlvl = maxlvl, minpts = minpts, clust_options = clust_options, cuml = T)))
     } else return(rep(clust, nrow(data[idxs,])))
   }
   if (nrow(data[idxs,])>maxevts) {
@@ -287,7 +287,7 @@ save_model<-function(res, file) {
     if (knn_needed) {
       new_embdata<-umap_model$transform(data[idxs,][-datasample,])
       if (is.null(cl_model)){
-        knn<-FNN::get.knnx(embdata, new_embdata, k=1)
+        knn<-FNN::get.knnx(embdata, new_embdata, k=1) # TODO: use cuml here too!
         newclusters<-clusters[knn$nn.index]
       } else {
         newclusters<-predict.s2dcluster(cl_model, new_embdata)
@@ -317,16 +317,16 @@ save_model<-function(res, file) {
       if (ret_model) {
         tempclust<-get(paste0("nclust", c))
         clusters[clusters == c]<-tempclust$cluster
-        if (length(unique(tempclust$cluster)) > 1) newmodels[[c]]<-tempclust$model
+        newmodels[[c]]<-tempclust$model
       } else clusters[clusters == c]<-get(paste0("nclust", c))
     }
   } else if (!is.null(myqueue)) myqueue$producer$fireAssignReactive("umap_dbs_msg", paste0("Found only 1 cluster on ", clust, " (level ", lvl, ") or no deeper level allowed. Skipping deeper levels on this cluster."))
   if (lvl == 1) if (!is.null(myqueue)) myqueue$producer$fireAssignReactive("umap_dbs_msg", paste0("Found a total of ", length(unique(clusters)), " clusters."))
   if (ret_model) {
     umap_file<-tempfile()
-    uwot::save_uwot(umap_model, umap_file)
-    thismodel<-list(cluster = clust, data_columns = ncol(data), maxevts = maxevts, maxlvl = maxlvl, minpts = minpts, clust_options = clust_options)
-    if (length(unique(clusters)) > 1) thismodel<-c(thismodel, list(umap_file = umap_file, umap_sample = datasample, s2dcluster_model = cl_model))
+    reticulate::py_save_object(umap_model, umap_file)
+    thismodel<-list(cluster = clust, data_columns = ncol(data), maxevts = maxevts, maxlvl = maxlvl, minpts = minpts, clust_options = clust_options, cuml = T)
+    thismodel<-c(thismodel, list(umap_file = umap_file, umap_sample = datasample, s2dcluster_model = cl_model))
     if (length(newmodels) > 0) thismodel<-c(thismodel, newmodels)
     return(list(cluster = clusters, model = thismodel))
   } else return(clusters)
@@ -355,7 +355,6 @@ save_model<-function(res, file) {
 #' @import grDevices graphics stats utils future
 #' @export
 cuml_sumapc<-function(data, maxevts, maxlvl, minpts, clust_options, ret_model = F, myqueue = NULL, verbose = F) {
-  ret_model<-F # hardcode ret_model until implemented!
   if (ret_model) {
     if (!(clust_options$method %in% c("sdbscan", "kdbscan"))) stop("ret_model needs sdbscan or kdbscan clustering method!", call. = F)
   }
