@@ -152,8 +152,13 @@ sumapc<-function(data, maxevts = 10000L, maxlvl = 3L, minpts = 100L, clust_optio
 }
 
 .sumapc_newdata<-function(x, model, multi_thread = T, verbose = F) {
-  umap_model<-uwot::load_uwot(model$umap_file)
-  embdata<-uwot::umap_transform(x, umap_model, n_threads = ifelse(multi_thread, RcppParallel::defaultNumThreads(), 1), verbose = verbose)
+  if (model$cuml) {
+    umap_model<-reticulate::py_load_object(model$umap_file)
+    embdata<-umap_model$transform(x)
+  } else {
+    umap_model<-uwot::load_uwot(model$umap_file)
+    embdata<-uwot::umap_transform(x, umap_model, n_threads = ifelse(multi_thread, RcppParallel::defaultNumThreads(), 1), verbose = verbose)
+  }
   s2dmodel<-model$s2dcluster_model
   clust<-predict.s2dcluster(s2dmodel, embdata)
   clust<-paste0(model$cluster, "_", clust)
@@ -181,6 +186,12 @@ sumapc<-function(data, maxevts = 10000L, maxlvl = 3L, minpts = 100L, clust_optio
 predict.sumapc<-function(object, newdata, multi_thread = T, verbose = F, ...) {
   if (!inherits(object, "sumapc")) stop("object must be a sumapc result object!", call. = F)
   if (!is.matrix(newdata) || ncol(newdata) != object$model$data_columns || nrow(newdata) < 1) stop(paste0("newdata must be a matrix with ", object$model$data_columns, " columns and >0 rows!"), call. = F)
+  if (object$model$cuml) {
+    if (requireNamespace("reticulate", quietly = T)) {
+      cuml<-try(reticulate::import("cuml"), silent = T)
+      if (inherits(cuml, "try-error")) stop("CUML is needed!!!", call. = F)
+    } else stop("CUML is needed!!!", call. = F)
+  }
   cluster<-c()
   if (length(object$clusters) > 1) {
     cluster<-.sumapc_newdata(newdata, object$model, multi_thread = multi_thread, verbose = verbose)
@@ -380,10 +391,17 @@ cuml_sumapc<-function(data, maxevts, maxlvl, minpts, clust_options, ret_model = 
 }
 
 .plot.sumapc_model<-function(model, data, ...) {
-  umap_model<-uwot::load_uwot(model$umap_file)
-  if (is.null(data)) {
-    embdata<-umap_model$embedding
-  } else embdata<-uwot::umap_transform(data, umap_model)
+  if (model$cuml) {
+    umap_model<-reticulate::py_load_object(model$umap_file)
+    if (is.null(data)) {
+      embdata<-umap_model$embedding_
+    } else embdata<-umap_model$transform(data)
+  } else {
+    umap_model<-uwot::load_uwot(model$umap_file)
+    if (is.null(data)) {
+      embdata<-umap_model$embedding
+    } else embdata<-uwot::umap_transform(data, umap_model)
+  }
   par(fig=c(0,1,0.1,1), mar=c(2.1,2.1,2.1,1.1))
   plot.s2dcluster(model$s2dcluster_model, embdata, main = model$cluster, xlab="", ylab="", ...)
   clusts<-predict.s2dcluster(model$s2dcluster_model, embdata)
@@ -413,6 +431,12 @@ cuml_sumapc<-function(data, maxevts, maxlvl, minpts, clust_options, ret_model = 
 plot.sumapc<-function(x, data = NULL, ...) {
   if (!inherits(x, "sumapc")) stop("x must be a sumapc result object!", call. = F)
   if (!is.null(data)) if (!is.matrix(data) || ncol(data) != x$model$data_columns || nrow(data) < 1) stop(paste0("data must be a matrix with ", x$model$data_columns, " columns and >0 rows!"), call. = F)
+  if (x$model$cuml) {
+    if (requireNamespace("reticulate", quietly = T)) {
+      cuml<-try(reticulate::import("cuml"), silent = T)
+      if (inherits(cuml, "try-error")) stop("CUML is needed!!!", call. = F)
+    } else stop("CUML is needed!!!", call. = F)
+  }
   .plot.sumapc_model(x$model, data, ...)
 }
 
