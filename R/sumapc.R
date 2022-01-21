@@ -440,6 +440,23 @@ plot.sumapc<-function(x, data = NULL, ...) {
   .plot.sumapc_model(x$model, data, ...)
 }
 
+#' Print sumapc model information
+#'
+#' @param x sumapc model
+#' @param ... NOT USED
+#'
+#' @export
+print.sumapc<-function(x, ...) {
+  if (!inherits(x, "sumapc")) stop("x must be a sumapc result object!", call. = F)
+  cat("sumapc model object.\n")
+  if (x$model$cuml) {
+    cat("sumapc model created using cuml GPU acceleration!\n")
+  }
+  cat("Found", length(x$clusters), "clusters.\n")
+  cat("Cluster table:")
+  print(table(x$cluster))
+}
+
 #### simple 2d clustering methods for data with sparse dense clusters ####
 .kdbscan<-function(x, minpts = 100, mindens = 0.001, level = 1, idxs = 1:nrow(x)>0, cluster = "root", maxlvl = 100, alfa = 0.05, theta = 5, ret_model = F) {
   cut_x<-NULL
@@ -776,7 +793,7 @@ plot.s2dcluster<-function(x, data = NULL, cex=2, ...) {
 #' @export
 print.s2dcluster<-function(x, ...) {
   if (!inherits(x, "s2dcluster")) stop("x must be a s2dcluster result object!", call. = F)
-  cat("s2dcluster result object.\n")
+  cat("s2dcluster model object.\n")
   cat("Data file:", x$x, "with", length(x$cluster), "points.\n")
   cat("Found", length(x$clusters), "clusters.\n")
   cat("Cluster table:")
