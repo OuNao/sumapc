@@ -1,6 +1,6 @@
 #### clustering functions ####
 #### sequencial UMAP dim reduction and density based clustering ####
-.umap_dbs_clust<-function(data, maxevts, maxlvl, minpts, clust_options, idxs = 1:(nrow(data))>0, lvl = 1, clust = "cluster", multi_thread = T, fast_sgd = TRUE, ret_model = F, myqueue = NULL, verbose = verbose) {
+.sumapc<-function(data, maxevts, maxlvl, minpts, clust_options, idxs = 1:(nrow(data))>0, lvl = 1, clust = "cluster", multi_thread = T, fast_sgd = TRUE, ret_model = F, myqueue = NULL, verbose = verbose) {
   knn_needed<-FALSE
   if (!is.matrix(data[idxs,])) {
     if (ret_model){
@@ -82,9 +82,9 @@
       nidxs[idxs]<-nidxs[idxs] & (clusters == c)
       c<-c
       if (multi_thread) {
-        futureAssign(paste0("nclust", c), .umap_dbs_clust(data, maxevts, maxlvl, minpts, clust_options, idxs = nidxs, lvl = lvl+1, clust = c, multi_thread = multi_thread, fast_sgd = fast_sgd, ret_model = ret_model, myqueue = myqueue, verbose = verbose), seed = T)
+        futureAssign(paste0("nclust", c), .sumapc(data, maxevts, maxlvl, minpts, clust_options, idxs = nidxs, lvl = lvl+1, clust = c, multi_thread = multi_thread, fast_sgd = fast_sgd, ret_model = ret_model, myqueue = myqueue, verbose = verbose), seed = T)
       } else {
-        assign(paste0("nclust", c), .umap_dbs_clust(data, maxevts, maxlvl, minpts, clust_options, idxs = nidxs, lvl = lvl+1, clust = c, multi_thread = multi_thread, fast_sgd = fast_sgd, ret_model = ret_model, myqueue = myqueue, verbose = verbose))
+        assign(paste0("nclust", c), .sumapc(data, maxevts, maxlvl, minpts, clust_options, idxs = nidxs, lvl = lvl+1, clust = c, multi_thread = multi_thread, fast_sgd = fast_sgd, ret_model = ret_model, myqueue = myqueue, verbose = verbose))
       }
     }
     for (c in new_clusters) {
@@ -130,11 +130,11 @@
 #' @return A vector of cluster numbers with length = nrow(data)
 #' @import grDevices graphics stats utils future
 #' @export
-umap_dbs_clust<-function(data, maxevts = 10000L, maxlvl = 3L, minpts = 100L, clust_options, multi_thread = T, fast_sgd = TRUE, ret_model = F, myqueue = NULL, verbose = F) {
+sumapc<-function(data, maxevts = 10000L, maxlvl = 3L, minpts = 100L, clust_options, multi_thread = T, fast_sgd = TRUE, ret_model = F, myqueue = NULL, verbose = F) {
   if (ret_model) {
     if (!(clust_options$method %in% c("sdbscan", "kdbscan"))) stop("ret_model needs sdbscan or kdbscan clustering method!", call. = F)
   }
-  clusters<-.umap_dbs_clust(data = data, maxevts = maxevts, maxlvl = maxlvl, minpts = minpts, clust_options = clust_options, multi_thread = multi_thread, fast_sgd = fast_sgd, ret_model = ret_model, myqueue = myqueue, verbose = verbose)
+  clusters<-.sumapc(data = data, maxevts = maxevts, maxlvl = maxlvl, minpts = minpts, clust_options = clust_options, multi_thread = multi_thread, fast_sgd = fast_sgd, ret_model = ret_model, myqueue = myqueue, verbose = verbose)
   if (ret_model) {
     clusters_model<-clusters$model
     clusters<-clusters$cluster
@@ -194,7 +194,7 @@ predict.sumapc<-function(object, newdata, multi_thread = T, verbose = F, ...) {
   file.copy(model$umap_file, modelfile, overwrite = T)
   model$umap_file<-modelfile
   for (i in paste0(model$cluster, "_", model$s2dcluster_model$clusters)) {
-    if (!is.null(model[[clust]]$umap_file)) {
+    if (!is.null(model[[i]]$umap_file)) {
       model[[i]]<-.save_model(model[[i]], modeldir)
     }
   }
@@ -230,7 +230,7 @@ save_model<-function(res, file) {
 }
 
 ### CUML version
-.cuml_umap_dbs_clust<-function(data, maxevts, maxlvl, minpts, clust_options, idxs = 1:(nrow(data))>0, lvl = 1, clust = "cluster", multi_thread = T, ret_model = F, myqueue = NULL, verbose = verbose, cuml = NULL) {
+.cuml_sumapc<-function(data, maxevts, maxlvl, minpts, clust_options, idxs = 1:(nrow(data))>0, lvl = 1, clust = "cluster", multi_thread = T, ret_model = F, myqueue = NULL, verbose = verbose, cuml = NULL) {
   knn_needed<-FALSE
   if (!is.matrix(data[idxs,])) {
     if (ret_model){
@@ -311,7 +311,7 @@ save_model<-function(res, file) {
       nidxs<-idxs
       nidxs[idxs]<-nidxs[idxs] & (clusters == c)
       c<-c
-      assign(paste0("nclust", c), .cuml_umap_dbs_clust(data, maxevts, maxlvl, minpts, clust_options, idxs = nidxs, lvl = lvl+1, clust = c, ret_model = ret_model, myqueue = myqueue, verbose = verbose, cuml = cuml))
+      assign(paste0("nclust", c), .cuml_sumapc(data, maxevts, maxlvl, minpts, clust_options, idxs = nidxs, lvl = lvl+1, clust = c, ret_model = ret_model, myqueue = myqueue, verbose = verbose, cuml = cuml))
     }
     for (c in new_clusters) {
       if (ret_model) {
@@ -354,7 +354,7 @@ save_model<-function(res, file) {
 #' @return A vector of cluster numbers with length = nrow(data)
 #' @import grDevices graphics stats utils future
 #' @export
-cuml_umap_dbs_clust<-function(data, maxevts, maxlvl, minpts, clust_options, ret_model = F, myqueue = NULL, verbose = F) {
+cuml_sumapc<-function(data, maxevts, maxlvl, minpts, clust_options, ret_model = F, myqueue = NULL, verbose = F) {
   ret_model<-F # hardcode ret_model until implemented!
   if (ret_model) {
     if (!(clust_options$method %in% c("sdbscan", "kdbscan"))) stop("ret_model needs sdbscan or kdbscan clustering method!", call. = F)
@@ -363,7 +363,7 @@ cuml_umap_dbs_clust<-function(data, maxevts, maxlvl, minpts, clust_options, ret_
     cuml<-try(reticulate::import("cuml"), silent = T)
     if (inherits(cuml, "try-error")) stop("CUML is needed!!!", call. = F)
   } else stop("CUML is needed!!!", call. = F)
-  clusters<-.cuml_umap_dbs_clust(data = data, maxevts = maxevts, maxlvl = maxlvl, minpts = minpts, clust_options = clust_options, ret_model = ret_model, myqueue = myqueue, verbose = verbose, cuml = cuml)
+  clusters<-.cuml_sumapc(data = data, maxevts = maxevts, maxlvl = maxlvl, minpts = minpts, clust_options = clust_options, ret_model = ret_model, myqueue = myqueue, verbose = verbose, cuml = cuml)
   if (ret_model) {
     clusters_model<-clusters$model
     clusters<-clusters$cluster

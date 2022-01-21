@@ -2,15 +2,15 @@
 % Please edit documentation in R/sumapc.R
 \name{save_model}
 \alias{save_model}
-\title{Save UMAP_s2dcluster model to file}
+\title{Save sumapc model to file}
 \usage{
 save_model(res, file)
 }
 \arguments{
-\item{res}{UMAP_s2dcluster model.}
+\item{res}{sumapc model.}
 
 \item{file}{filename.}
 }
 \description{
-Save UMAP_s2dcluster model to file
+Save sumapc model to file
 }
