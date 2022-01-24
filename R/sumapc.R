@@ -1,6 +1,7 @@
 #### clustering functions ####
 #### sequencial UMAP dim reduction and density based clustering ####
-.sumapc<-function(data, maxevts, maxlvl, minpts, clust_options, idxs = 1:(nrow(data))>0, lvl = 1, clust = "cluster", multi_thread = T, fast_sgd = TRUE, ret_model = F, myqueue = NULL, verbose = verbose) {
+.sumapc<-function(data, maxevts, maxlvl, minpts, clust_options, idxs = 1:(nrow(data))>0, lvl = 1, clust = "cluster", multi_thread = T, fast_sgd = TRUE, ret_model = F, myqueue = NULL, verbose = verbose, seed = NULL) {
+  if (!is.null(seed)) set.seed(as.integer(seed))
   knn_needed<-FALSE
   if (!is.matrix(data[idxs,])) {
     if (ret_model){
@@ -82,9 +83,9 @@
       nidxs[idxs]<-nidxs[idxs] & (clusters == c)
       c<-c
       if (multi_thread) {
-        futureAssign(paste0("nclust", c), .sumapc(data, maxevts, maxlvl, minpts, clust_options, idxs = nidxs, lvl = lvl+1, clust = c, multi_thread = multi_thread, fast_sgd = fast_sgd, ret_model = ret_model, myqueue = myqueue, verbose = verbose), seed = T)
+        futureAssign(paste0("nclust", c), .sumapc(data, maxevts, maxlvl, minpts, clust_options, idxs = nidxs, lvl = lvl+1, clust = c, multi_thread = multi_thread, fast_sgd = fast_sgd, ret_model = ret_model, myqueue = myqueue, verbose = verbose, seed = seed), seed = T)
       } else {
-        assign(paste0("nclust", c), .sumapc(data, maxevts, maxlvl, minpts, clust_options, idxs = nidxs, lvl = lvl+1, clust = c, multi_thread = multi_thread, fast_sgd = fast_sgd, ret_model = ret_model, myqueue = myqueue, verbose = verbose))
+        assign(paste0("nclust", c), .sumapc(data, maxevts, maxlvl, minpts, clust_options, idxs = nidxs, lvl = lvl+1, clust = c, multi_thread = multi_thread, fast_sgd = fast_sgd, ret_model = ret_model, myqueue = myqueue, verbose = verbose, seed = seed))
       }
     }
     for (c in new_clusters) {
@@ -107,7 +108,8 @@
 }
 
 ### CUML version
-.cuml_sumapc<-function(data, maxevts, maxlvl, minpts, clust_options, idxs = 1:(nrow(data))>0, lvl = 1, clust = "cluster", multi_thread = T, ret_model = F, myqueue = NULL, verbose = verbose, cuml = NULL) {
+.cuml_sumapc<-function(data, maxevts, maxlvl, minpts, clust_options, idxs = 1:(nrow(data))>0, lvl = 1, clust = "cluster", multi_thread = T, ret_model = F, myqueue = NULL, verbose = verbose, cuml = NULL, seed = NULL) {
+  if (!is.null(seed)) set.seed(as.integer(seed))
   knn_needed<-FALSE
   if (!is.matrix(data[idxs,])) {
     if (ret_model){
@@ -130,7 +132,9 @@
   nbins = clust_options$nbins
   mvpratio = clust_options$mvpratio
   # UMAP modeling
-  umap_model<-cuml$UMAP(n_epochs = 500L)$fit(data[idxs,][datasample,])
+  if (!is.null(seed)) {
+    umap_model<-cuml$UMAP(n_epochs = 500L, random_state = as.integer(seed))$fit(data[idxs,][datasample,])
+  } else umap_model<-cuml$UMAP(n_epochs = 500L)$fit(data[idxs,][datasample,])
   embdata<-umap_model$embedding_
   # clustering UMAP embedding
   clusters<-switch (method,
@@ -188,7 +192,7 @@
       nidxs<-idxs
       nidxs[idxs]<-nidxs[idxs] & (clusters == c)
       c<-c
-      assign(paste0("nclust", c), .cuml_sumapc(data, maxevts, maxlvl, minpts, clust_options, idxs = nidxs, lvl = lvl+1, clust = c, ret_model = ret_model, myqueue = myqueue, verbose = verbose, cuml = cuml))
+      assign(paste0("nclust", c), .cuml_sumapc(data, maxevts, maxlvl, minpts, clust_options, idxs = nidxs, lvl = lvl+1, clust = c, ret_model = ret_model, myqueue = myqueue, verbose = verbose, cuml = cuml, seed = seed))
     }
     for (c in new_clusters) {
       if (ret_model) {
@@ -221,6 +225,8 @@
 #' @param ret_model logical; should clustering model be exported.
 #' @param myqueue shinyQueue object. Multithreaded code use \link[future]{future} package. This object is used to send log messages to the base worker.
 #' @param verbose logical.
+#' @param use_cuml logical. Enable CUML GPU compute acceleration.
+#' @param seed Integer or NULL.
 #'
 #' @details clust_options must be a named list containing:
 #'  method: one of "dbscan", "hdbscan", "kdbscan", "sdbscan"
@@ -233,58 +239,20 @@
 #' @return A vector of cluster numbers with length = nrow(data)
 #' @import grDevices graphics stats utils future
 #' @export
-sumapc<-function(data, maxevts = 10000L, maxlvl = 3L, minpts = 100L, clust_options, multi_thread = T, fast_sgd = TRUE, ret_model = F, myqueue = NULL, verbose = F) {
+sumapc<-function(data, maxevts = 10000L, maxlvl = 3L, minpts = 100L, clust_options = list(method = "sdbscan", mineps = 1, mindens = 0.1, bw = 0.05, nbins = 5, mvpratio = 0.5), multi_thread = T, fast_sgd = TRUE, ret_model = F, myqueue = NULL, verbose = F, use_cuml = F, seed = NULL) {
+  if (!is.null(seed)) if (!is.numeric(seed)) stop("Seed must be a integer")
   if (ret_model) {
     if (!(clust_options$method %in% c("sdbscan", "kdbscan"))) stop("ret_model needs sdbscan or kdbscan clustering method!", call. = F)
   }
-  clusters<-.sumapc(data = data, maxevts = maxevts, maxlvl = maxlvl, minpts = minpts, clust_options = clust_options, multi_thread = multi_thread, fast_sgd = fast_sgd, ret_model = ret_model, myqueue = myqueue, verbose = verbose)
-  if (ret_model) {
-    clusters_model<-clusters$model
-    clusters<-clusters$cluster
+  if (use_cuml) {
+    if (requireNamespace("reticulate", quietly = T)) {
+      cuml<-try(reticulate::import("cuml"), silent = T)
+      if (inherits(cuml, "try-error")) stop("CUML is needed!!! Set use_cuml = F to disable cuml acceleration.", call. = F)
+    } else stop("Reticulate package is needed for cuml interface! Set use_cuml = F to disable cuml acceleration.", call. = F)
+    clusters<-.cuml_sumapc(data = data, maxevts = maxevts, maxlvl = maxlvl, minpts = minpts, clust_options = clust_options, ret_model = ret_model, myqueue = myqueue, verbose = verbose, cuml = cuml, seed = seed)
+  } else {
+    clusters<-.sumapc(data = data, maxevts = maxevts, maxlvl = maxlvl, minpts = minpts, clust_options = clust_options, multi_thread = multi_thread, fast_sgd = fast_sgd, ret_model = ret_model, myqueue = myqueue, verbose = verbose, seed = seed)
   }
-  ctable<-as.data.frame(table(clusters))
-  ctable<-ctable[order(ctable$Freq, decreasing = T),]
-  new_clusters<-c(1:nrow(ctable))
-  names(new_clusters)<-ctable$clusters
-  clusters<-unname(new_clusters[clusters])
-  if (ret_model) {
-    res<-list(cluster = clusters, clusters=new_clusters, model = clusters_model)
-    class(res)<-"sumapc"
-    return(res)
-  } else return(clusters)
-}
-
-#' Sequential UMAP 2d embedding and simple 2d space partitioning clustering (CUML accelerated version).
-#'
-#' @param data a data matrix.
-#' @param maxevts max number of random points to apply UMAP.
-#' @param maxlvl max sequential levels to process.
-#' @param minpts min cluster size.
-#' @param clust_options list; 2d clustering options (see Details).
-#' @param ret_model logical; should clustering model be exported.
-#' @param myqueue shinyQueue object. Multithreaded code use \link[future]{future} package. This object is used to send log messages to the base worker.
-#' @param verbose logical.
-#'
-#' @details clust_options must be a named list containing:
-#'  method: one of "dbscan", "hdbscan", "kdbscan", "sdbscan"
-#'  mineps: min eps value passed to dbscan
-#'  mindens: min density passed to kdbscan
-#'  bw: bw passed to sdbscan
-#'  nbins: min number of bins of bw width
-#'  mvpratio: max valley/peak ratio)
-#'
-#' @return A vector of cluster numbers with length = nrow(data)
-#' @import grDevices graphics stats utils future
-#' @export
-cuml_sumapc<-function(data, maxevts, maxlvl, minpts, clust_options, ret_model = F, myqueue = NULL, verbose = F) {
-  if (ret_model) {
-    if (!(clust_options$method %in% c("sdbscan", "kdbscan"))) stop("ret_model needs sdbscan or kdbscan clustering method!", call. = F)
-  }
-  if (requireNamespace("reticulate", quietly = T)) {
-    cuml<-try(reticulate::import("cuml"), silent = T)
-    if (inherits(cuml, "try-error")) stop("CUML is needed!!!", call. = F)
-  } else stop("CUML is needed!!!", call. = F)
-  clusters<-.cuml_sumapc(data = data, maxevts = maxevts, maxlvl = maxlvl, minpts = minpts, clust_options = clust_options, ret_model = ret_model, myqueue = myqueue, verbose = verbose, cuml = cuml)
   if (ret_model) {
     clusters_model<-clusters$model
     clusters<-clusters$cluster
