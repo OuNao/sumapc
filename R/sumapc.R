@@ -106,140 +106,6 @@
   } else return(clusters)
 }
 
-#' Sequential UMAP 2d embedding and simple 2d space partitioning clustering.
-#'
-#' @param data a data matrix.
-#' @param maxevts max number of random points to apply UMAP.
-#' @param maxlvl max sequential levels to process.
-#' @param minpts min cluster size.
-#' @param clust_options list; 2d clustering options (see Details).
-#' @param multi_thread logical.
-#' @param fast_sgd logical; see \link[uwot]{umap}.
-#' @param ret_model logical; should clustering model be exported.
-#' @param myqueue shinyQueue object. Multithreaded code use \link[future]{future} package. This object is used to send log messages to the base worker.
-#' @param verbose logical.
-#'
-#' @details clust_options must be a named list containing:
-#'  method: one of "dbscan", "hdbscan", "kdbscan", "sdbscan"
-#'  mineps: min eps value passed to dbscan
-#'  mindens: min density passed to kdbscan
-#'  bw: bw passed to sdbscan
-#'  nbins: min number of bins of bw width
-#'  mvpratio: max valley/peak ratio)
-#'
-#' @return A vector of cluster numbers with length = nrow(data)
-#' @import grDevices graphics stats utils future
-#' @export
-sumapc<-function(data, maxevts = 10000L, maxlvl = 3L, minpts = 100L, clust_options, multi_thread = T, fast_sgd = TRUE, ret_model = F, myqueue = NULL, verbose = F) {
-  if (ret_model) {
-    if (!(clust_options$method %in% c("sdbscan", "kdbscan"))) stop("ret_model needs sdbscan or kdbscan clustering method!", call. = F)
-  }
-  clusters<-.sumapc(data = data, maxevts = maxevts, maxlvl = maxlvl, minpts = minpts, clust_options = clust_options, multi_thread = multi_thread, fast_sgd = fast_sgd, ret_model = ret_model, myqueue = myqueue, verbose = verbose)
-  if (ret_model) {
-    clusters_model<-clusters$model
-    clusters<-clusters$cluster
-  }
-  ctable<-as.data.frame(table(clusters))
-  ctable<-ctable[order(ctable$Freq, decreasing = T),]
-  new_clusters<-c(1:nrow(ctable))
-  names(new_clusters)<-ctable$clusters
-  clusters<-unname(new_clusters[clusters])
-  if (ret_model) {
-    res<-list(cluster = clusters, clusters=new_clusters, model = clusters_model)
-    class(res)<-"sumapc"
-    return(res)
-  } else return(clusters)
-}
-
-.sumapc_newdata<-function(x, model, multi_thread = T, verbose = F) {
-  if (model$cuml) {
-    umap_model<-reticulate::py_load_object(model$umap_file)
-    embdata<-umap_model$transform(x)
-  } else {
-    umap_model<-uwot::load_uwot(model$umap_file)
-    embdata<-uwot::umap_transform(x, umap_model, n_threads = ifelse(multi_thread, RcppParallel::defaultNumThreads(), 1), verbose = verbose)
-  }
-  s2dmodel<-model$s2dcluster_model
-  clust<-predict.s2dcluster(s2dmodel, embdata)
-  clust<-paste0(model$cluster, "_", clust)
-  new_clusters<-unique(clust)
-  for (c in new_clusters) {
-    c<-c
-    if (length(model[[c]]$s2dcluster_model$clusters) == 1 || is.null(model[[c]]$s2dcluster_model)) next
-    idxs<-clust == c
-    nclust<-.sumapc_newdata(x[idxs,], model[[c]], multi_thread = multi_thread, verbose = verbose)
-    clust[idxs]<-nclust
-  }
-  return(clust)
-}
-
-#' Predict clusters based on a sumapc model
-#'
-#' @param object sumapc model.
-#' @param newdata a data matrix.
-#' @param multi_thread logical.
-#' @param verbose logical.
-#' @param ... NOT USED.
-#'
-#' @return A vector of cluster numbers with length = nrow(data)
-#' @export
-predict.sumapc<-function(object, newdata, multi_thread = T, verbose = F, ...) {
-  if (!inherits(object, "sumapc")) stop("object must be a sumapc result object!", call. = F)
-  if (!is.matrix(newdata) || ncol(newdata) != object$model$data_columns || nrow(newdata) < 1) stop(paste0("newdata must be a matrix with ", object$model$data_columns, " columns and >0 rows!"), call. = F)
-  if (object$model$cuml) {
-    if (requireNamespace("reticulate", quietly = T)) {
-      cuml<-try(reticulate::import("cuml"), silent = T)
-      if (inherits(cuml, "try-error")) stop("CUML is needed!!!", call. = F)
-    } else stop("CUML is needed!!!", call. = F)
-  }
-  cluster<-c()
-  if (length(object$clusters) > 1) {
-    cluster<-.sumapc_newdata(newdata, object$model, multi_thread = multi_thread, verbose = verbose)
-  } else cluster<-rep("cluster", nrow(newdata))
-  clusters<-unname(object$clusters[cluster])
-  return(clusters)
-}
-
-.save_model<-function(model, modeldir) {
-  modelfile<-file.path(modeldir, basename(model$umap_file))
-  file.copy(model$umap_file, modelfile, overwrite = T)
-  model$umap_file<-modelfile
-  for (i in paste0(model$cluster, "_", model$s2dcluster_model$clusters)) {
-    if (!is.null(model[[i]]$umap_file)) {
-      model[[i]]<-.save_model(model[[i]], modeldir)
-    }
-  }
-  return(model)
-}
-
-#' Save sumapc model to file
-#'
-#' @param res sumapc model.
-#' @param file filename.
-#'
-#' @export
-save_model<-function(res, file) {
-  if (!inherits(res, "sumapc")) stop("res must be a sumapc result object!", call. = F)
-  writeaccess<-tryCatch({
-    suppressWarnings(write.table(1, file))
-  }, error=function(e) FALSE)
-  if (!is.null(writeaccess)) {
-    stop("user must have write access rights to file!", call. = F)
-  } else {
-    file.remove(file)
-  }
-  dir<-dirname(file)
-  filename<-sub("([^.]+)\\.[[:alnum:]]+$", "\\1", basename(file))
-  modeldir<-paste0(filename, "_models")
-  olddir<-getwd()
-  setwd(dir)
-  dir.create(modeldir)
-  res$model<-.save_model(res$model, modeldir)
-  saveRDS(res, file)
-  setwd(olddir)
-  return(invisible(res))
-}
-
 ### CUML version
 .cuml_sumapc<-function(data, maxevts, maxlvl, minpts, clust_options, idxs = 1:(nrow(data))>0, lvl = 1, clust = "cluster", multi_thread = T, ret_model = F, myqueue = NULL, verbose = verbose, cuml = NULL) {
   knn_needed<-FALSE
@@ -343,6 +209,51 @@ save_model<-function(res, file) {
   } else return(clusters)
 }
 
+#' Sequential UMAP 2d embedding and simple 2d space partitioning clustering.
+#'
+#' @param data a data matrix.
+#' @param maxevts max number of random points to apply UMAP.
+#' @param maxlvl max sequential levels to process.
+#' @param minpts min cluster size.
+#' @param clust_options list; 2d clustering options (see Details).
+#' @param multi_thread logical.
+#' @param fast_sgd logical; see \link[uwot]{umap}.
+#' @param ret_model logical; should clustering model be exported.
+#' @param myqueue shinyQueue object. Multithreaded code use \link[future]{future} package. This object is used to send log messages to the base worker.
+#' @param verbose logical.
+#'
+#' @details clust_options must be a named list containing:
+#'  method: one of "dbscan", "hdbscan", "kdbscan", "sdbscan"
+#'  mineps: min eps value passed to dbscan
+#'  mindens: min density passed to kdbscan
+#'  bw: bw passed to sdbscan
+#'  nbins: min number of bins of bw width
+#'  mvpratio: max valley/peak ratio)
+#'
+#' @return A vector of cluster numbers with length = nrow(data)
+#' @import grDevices graphics stats utils future
+#' @export
+sumapc<-function(data, maxevts = 10000L, maxlvl = 3L, minpts = 100L, clust_options, multi_thread = T, fast_sgd = TRUE, ret_model = F, myqueue = NULL, verbose = F) {
+  if (ret_model) {
+    if (!(clust_options$method %in% c("sdbscan", "kdbscan"))) stop("ret_model needs sdbscan or kdbscan clustering method!", call. = F)
+  }
+  clusters<-.sumapc(data = data, maxevts = maxevts, maxlvl = maxlvl, minpts = minpts, clust_options = clust_options, multi_thread = multi_thread, fast_sgd = fast_sgd, ret_model = ret_model, myqueue = myqueue, verbose = verbose)
+  if (ret_model) {
+    clusters_model<-clusters$model
+    clusters<-clusters$cluster
+  }
+  ctable<-as.data.frame(table(clusters))
+  ctable<-ctable[order(ctable$Freq, decreasing = T),]
+  new_clusters<-c(1:nrow(ctable))
+  names(new_clusters)<-ctable$clusters
+  clusters<-unname(new_clusters[clusters])
+  if (ret_model) {
+    res<-list(cluster = clusters, clusters=new_clusters, model = clusters_model)
+    class(res)<-"sumapc"
+    return(res)
+  } else return(clusters)
+}
+
 #' Sequential UMAP 2d embedding and simple 2d space partitioning clustering (CUML accelerated version).
 #'
 #' @param data a data matrix.
@@ -388,6 +299,95 @@ cuml_sumapc<-function(data, maxevts, maxlvl, minpts, clust_options, ret_model = 
     class(res)<-"sumapc"
     return(res)
   } else return(clusters)
+}
+
+.sumapc_newdata<-function(x, model, multi_thread = T, verbose = F) {
+  if (model$cuml) {
+    umap_model<-reticulate::py_load_object(model$umap_file)
+    embdata<-umap_model$transform(x)
+  } else {
+    umap_model<-uwot::load_uwot(model$umap_file)
+    embdata<-uwot::umap_transform(x, umap_model, n_threads = ifelse(multi_thread, RcppParallel::defaultNumThreads(), 1), verbose = verbose)
+  }
+  s2dmodel<-model$s2dcluster_model
+  clust<-predict.s2dcluster(s2dmodel, embdata)
+  clust<-paste0(model$cluster, "_", clust)
+  new_clusters<-unique(clust)
+  for (c in new_clusters) {
+    c<-c
+    if (length(model[[c]]$s2dcluster_model$clusters) == 1 || is.null(model[[c]]$s2dcluster_model)) next
+    idxs<-clust == c
+    nclust<-.sumapc_newdata(x[idxs,], model[[c]], multi_thread = multi_thread, verbose = verbose)
+    clust[idxs]<-nclust
+  }
+  return(clust)
+}
+
+#' Predict clusters based on a sumapc model
+#'
+#' @param object sumapc model.
+#' @param newdata a data matrix.
+#' @param multi_thread logical.
+#' @param verbose logical.
+#' @param ... NOT USED.
+#'
+#' @return A vector of cluster numbers with length = nrow(data)
+#' @export
+predict.sumapc<-function(object, newdata, multi_thread = T, verbose = F, ...) {
+  if (!inherits(object, "sumapc")) stop("object must be a sumapc result object!", call. = F)
+  if (!is.matrix(newdata) || ncol(newdata) != object$model$data_columns || nrow(newdata) < 1) stop(paste0("newdata must be a matrix with ", object$model$data_columns, " columns and >0 rows!"), call. = F)
+  if (object$model$cuml) {
+    if (requireNamespace("reticulate", quietly = T)) {
+      cuml<-try(reticulate::import("cuml"), silent = T)
+      if (inherits(cuml, "try-error")) stop("CUML is needed!!!", call. = F)
+    } else stop("CUML is needed!!!", call. = F)
+  }
+  cluster<-c()
+  if (length(object$clusters) > 1) {
+    cluster<-.sumapc_newdata(newdata, object$model, multi_thread = multi_thread, verbose = verbose)
+  } else cluster<-rep("cluster", nrow(newdata))
+  clusters<-unname(object$clusters[cluster])
+  return(clusters)
+}
+
+.save_model<-function(model, modeldir) {
+  modelfile<-file.path(modeldir, basename(model$umap_file))
+  file.copy(model$umap_file, modelfile, overwrite = T)
+  model$umap_file<-modelfile
+  for (i in paste0(model$cluster, "_", model$s2dcluster_model$clusters)) {
+    if (!is.null(model[[i]]$umap_file)) {
+      model[[i]]<-.save_model(model[[i]], modeldir)
+    }
+  }
+  return(model)
+}
+
+#' Save sumapc model to file
+#'
+#' @param res sumapc model.
+#' @param file filename.
+#'
+#' @export
+save_model<-function(res, file) {
+  if (!inherits(res, "sumapc")) stop("res must be a sumapc result object!", call. = F)
+  writeaccess<-tryCatch({
+    suppressWarnings(write.table(1, file))
+  }, error=function(e) FALSE)
+  if (!is.null(writeaccess)) {
+    stop("user must have write access rights to file!", call. = F)
+  } else {
+    file.remove(file)
+  }
+  dir<-dirname(file)
+  filename<-sub("([^.]+)\\.[[:alnum:]]+$", "\\1", basename(file))
+  modeldir<-paste0(filename, "_models")
+  olddir<-getwd()
+  setwd(dir)
+  dir.create(modeldir)
+  res$model<-.save_model(res$model, modeldir)
+  saveRDS(res, file)
+  setwd(olddir)
+  return(invisible(res))
 }
 
 .plot.sumapc_model<-function(model, data, ...) {
