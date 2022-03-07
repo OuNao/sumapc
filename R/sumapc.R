@@ -580,7 +580,11 @@ getdensdata<-function(x2, axis, minpts) {
         if (!is.null(res)) vdata<-c(vdata, angle, axis, res)
       }
     }
-    if (!is.null(cut_x)) break
+    if (is.null(cut_x)) {
+      if (plotcuts) sdbscan_hist(x2[idxs,], bw = bw, cut_axis=cut_axis, cut_x=cut_x, cex=2, pch = ".",
+                                 main = paste0(cluster, " angle = ", angle*180/pi),
+                                 cex.main = 0.8)
+    } else break
   }
   if (is.null(cut_x)) {
     if (mvpratio > 0 && !is.null(vdata)) {
@@ -871,9 +875,11 @@ sdbscan_hist<-function(x, xlab="", ylab="", bw, cut_axis, cut_x, ...){
   oldpar<-par(no.readonly = T)
   par(mar=c(3,3,1,1))
   plot(x, xlab = "", ylab = "", ...)
-  if (cut_axis == 1) {
-    abline(v = cut_x)
-  } else abline(h = cut_x)
+  if (!is.null(cut_x)) {
+    if (cut_axis == 1) {
+      abline(v = cut_x)
+    } else abline(h = cut_x)
+  }
   par(mar=c(0,3,1,1))
   barplot(xhist$counts, axes=FALSE, ylim=c(0, max(xhist$counts)), space=0)
   par(mar=c(3,0,1,1))
@@ -883,5 +889,5 @@ sdbscan_hist<-function(x, xlab="", ylab="", bw, cut_axis, cut_x, ...){
         at=.8 * (mean(x[,1]) - min(x[,1]))/(max(x[,1])-min(x[,1])))
   mtext(ylab, side=2, line=1, outer=TRUE, adj=0,
         at=(.8 * (mean(x[,2]) - min(x[,2]))/(max(x[,2]) - min(x[,2]))))
-  par(oldpar)
+  par(oldpar[c("mar", "oma")])
 }
