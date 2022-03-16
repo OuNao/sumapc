@@ -1,6 +1,6 @@
 #### clustering functions ####
 #### sequencial UMAP dim reduction and density based clustering ####
-.sumapc<-function(data, maxevts, maxlvl, minpts, clust_options, idxs = 1:(nrow(data))>0, lvl = 1, clust = "cluster", multi_thread = T, fast_sgd = TRUE, ret_model = F, myqueue = NULL, verbose = verbose, seed = NULL) {
+.sumapc<-function(data, maxevts, maxlvl, minpts, clust_options, idxs = 1:(nrow(data))>0, lvl = 1, clust = "cluster", multi_thread = T, fast_sgd = T, ret_model = F, myqueue = NULL, verbose = verbose, seed = NULL) {
   if (!is.null(seed)) set.seed(as.integer(seed))
   knn_needed<-FALSE
   if (!is.matrix(data[idxs,])) {
@@ -239,7 +239,7 @@
 #' @return A vector of cluster numbers with length = nrow(data)
 #' @import grDevices graphics stats utils future
 #' @export
-sumapc<-function(data, maxevts = 10000L, maxlvl = 3L, minpts = 100L, clust_options = list(method = "sdbscan", mineps = 1, mindens = 0.1, bw = 0.05, nbins = 5, mvpratio = 0.5), multi_thread = T, fast_sgd = TRUE, ret_model = F, myqueue = NULL, verbose = F, use_cuml = F, seed = NULL) {
+sumapc<-function(data, maxevts = 10000L, maxlvl = 3L, minpts = 100L, clust_options = list(method = "sdbscan", mineps = 1, mindens = 0.1, bw = 0.05, nbins = 5, mvpratio = 0.5), multi_thread = TRUE, fast_sgd = TRUE, ret_model = FALSE, myqueue = NULL, verbose = FALSE, use_cuml = FALSE, seed = NULL) {
   if (!is.null(seed)) if (!is.numeric(seed)) stop("Seed must be a integer", call. = F)
   if (multi_thread && !("package:future" %in% search())) stop("future package needed for multi_thread work. Try library(future).", call. = F)
   if (ret_model) {
@@ -302,7 +302,7 @@ sumapc<-function(data, maxevts = 10000L, maxlvl = 3L, minpts = 100L, clust_optio
 #'
 #' @return A vector of cluster numbers with length = nrow(data)
 #' @export
-predict.sumapc<-function(object, newdata, multi_thread = T, verbose = F, ...) {
+predict.sumapc<-function(object, newdata, multi_thread = TRUE, verbose = FALSE, ...) {
   if (!inherits(object, "sumapc")) stop("object must be a sumapc result object!", call. = F)
   if (!is.matrix(newdata) || ncol(newdata) != object$model$data_columns || nrow(newdata) < 1) stop(paste0("newdata must be a matrix with ", object$model$data_columns, " columns and >0 rows!"), call. = F)
   if (object$model$cuml) {
@@ -514,7 +514,7 @@ print.sumapc<-function(x, ...) {
 #'
 #' @return A vector with cluster numbers. Length = nrow(x)
 #' @export
-kdbscan<-function(x, minpts = 100, mindens = 0.001, maxlvl = 100, alfa = 0.05, theta = 5, ret_model = F) {
+kdbscan<-function(x, minpts = 100, mindens = 0.001, maxlvl = 100, alfa = 0.05, theta = 5, ret_model = FALSE) {
   clusters<-.kdbscan(x, minpts = minpts, mindens = mindens, maxlvl = maxlvl, theta = theta, ret_model = ret_model)
   if (ret_model) {
     clusters_model<-clusters$model
@@ -673,7 +673,7 @@ getdensdata<-function(x2, axis, minpts) {
 #'
 #' @return A vector with cluster numbers. Length = nrow(x)
 #' @export
-sdbscan<-function(x, minpts = 100, maxlvl = 100, alfa = 0.05, bw = 0.25, nbins = 1, theta = 5, mvpratio = 0.5, ret_model = F, plotcuts = F) {  ### TODO: check parameters
+sdbscan<-function(x, minpts = 100, maxlvl = 100, alfa = 0.05, bw = 0.25, nbins = 1, theta = 5, mvpratio = 0.5, ret_model = FALSE, plotcuts = FALSE) {  ### TODO: check parameters
   clusters<-.sdbscan(x, minpts = minpts, maxlvl = maxlvl, alfa = alfa, bw = bw, nbins = nbins, theta = theta, mvpratio = mvpratio, ret_model = ret_model, plotcuts = plotcuts)
   if (ret_model) {
     clusters_model<-clusters$model
