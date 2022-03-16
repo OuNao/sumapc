@@ -223,7 +223,7 @@
 #' @param multi_thread logical. Needs \link[future]{future} package loaded and multisession plan selected.
 #' @param fast_sgd logical; see \link[uwot]{umap}.
 #' @param ret_model logical; should clustering model be exported.
-#' @param myqueue shinyQueue object. Multithreaded code use \link[future]{future} package. This object is used to send log messages to the base worker. See \link[ipc]{ipc}.
+#' @param myqueue shinyQueue object. Multithreaded code use \link[future]{future} package. This object is used to send log messages to the base worker. See \link[ipc]{shinyQueue}.
 #' @param verbose logical.
 #' @param use_cuml logical. Enable CUML GPU compute acceleration.
 #' @param seed Integer or NULL.

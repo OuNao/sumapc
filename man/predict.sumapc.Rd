@@ -4,7 +4,7 @@
 \alias{predict.sumapc}
 \title{Predict clusters based on a sumapc model}
 \usage{
-\method{predict}{sumapc}(object, newdata, multi_thread = T, verbose = F, ...)
+\method{predict}{sumapc}(object, newdata, multi_thread = TRUE, verbose = FALSE, ...)
 }
 \arguments{
 \item{object}{sumapc model.}

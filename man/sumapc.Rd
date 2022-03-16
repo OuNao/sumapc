@@ -9,12 +9,15 @@ sumapc(
   maxevts = 10000L,
   maxlvl = 3L,
   minpts = 100L,
-  clust_options,
-  multi_thread = T,
+  clust_options = list(method = "sdbscan", mineps = 1, mindens = 0.1, bw = 0.05, nbins
+    = 5, mvpratio = 0.5),
+  multi_thread = TRUE,
   fast_sgd = TRUE,
-  ret_model = F,
+  ret_model = FALSE,
   myqueue = NULL,
-  verbose = F
+  verbose = FALSE,
+  use_cuml = FALSE,
+  seed = NULL
 )
 }
 \arguments{
@@ -28,15 +31,19 @@ sumapc(
 
 \item{clust_options}{list; 2d clustering options (see Details).}
 
-\item{multi_thread}{logical.}
+\item{multi_thread}{logical. Needs \link[future]{future} package loaded and multisession plan selected.}
 
 \item{fast_sgd}{logical; see \link[uwot]{umap}.}
 
 \item{ret_model}{logical; should clustering model be exported.}
 
-\item{myqueue}{shinyQueue object. Multithreaded code use \link[future]{future} package. This object is used to send log messages to the base worker.}
+\item{myqueue}{shinyQueue object. Multithreaded code use \link[future]{future} package. This object is used to send log messages to the base worker. See \link[ipc]{shinyQueue}.}
 
 \item{verbose}{logical.}
+
+\item{use_cuml}{logical. Enable CUML GPU compute acceleration.}
+
+\item{seed}{Integer or NULL.}
 }
 \value{
 A vector of cluster numbers with length = nrow(data)

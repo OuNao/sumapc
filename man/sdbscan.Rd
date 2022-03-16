@@ -13,8 +13,8 @@ sdbscan(
   nbins = 1,
   theta = 5,
   mvpratio = 0.5,
-  ret_model = F,
-  plotcuts = F
+  ret_model = FALSE,
+  plotcuts = FALSE
 )
 }
 \arguments{

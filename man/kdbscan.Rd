@@ -11,7 +11,7 @@ kdbscan(
   maxlvl = 100,
   alfa = 0.05,
   theta = 5,
-  ret_model = F
+  ret_model = FALSE
 )
 }
 \arguments{
