@@ -542,9 +542,10 @@ getdensdata<-function(x2, axis, minpts) {
   return(c(v$minimum, v$objective, p1$objective, p2$objective))
 }
 
-.sdbscan<-function(x, minpts = 100, level = 1, idxs = 1:nrow(x)>0, cluster = "root", maxlvl = 100, alfa = 0.05, bw = 0.25, nbins = 1, theta = 5, mvpratio = 0.5, ret_model = F, plotcuts = F) {
+.sdbscan<-function(x, minpts = 100, level = 1, idxs = 1:nrow(x)>0, cluster = "root", maxlvl = 100, alfa = 0.05, bw = 0.25, nbins = 1, theta = 5, mvpratio = 0.5, search = "first", ret_model = F, plotcuts = F) {
   cut_x<-NULL
   vdata<-c()
+  cdata<-c()
   for (.theta in seq(0, 90, theta)) {
     angle<-pi/180*.theta
     if (angle != 0) {
@@ -567,14 +568,20 @@ getdensdata<-function(x2, axis, minpts) {
           max_rep<-rep_order[r]
           if (reps[max_rep] < nbins) break
           cut_pos<-dens_0[sum(reps[1:max_rep])-floor(abs(reps[max_rep]/2))]
-          if (!any(as.integer(table(newx > cut_pos)) < minpts)) break
+          if (!any(as.integer(table(newx > cut_pos)) < minpts)) next
           cut_pos<-NULL
         }
         if (is.null(cut_pos)) next
         cut_x<-(((cut_pos+0.5)/bins[[axis]])*(thisrange[2]-thisrange[1]))+thisrange[1]
         cut_axis<-axis
         cut_angle<-angle
-        break
+        if (search == "first"){
+          break
+        } else {
+          cdata<-c(cdata, cut_angle, cut_axis, cut_x, max_rep, unname(table(x2[idxs,axis]>cut_axis)[1])/length(x2[idxs,axis]))
+          cut_x<-NULL
+        }
+
       }
       if (mvpratio > 0) {
         res<-getdensdata(x2[idxs,], axis, minpts)
@@ -588,7 +595,19 @@ getdensdata<-function(x2, axis, minpts) {
     } else break
   }
   if (is.null(cut_x)) {
-    if (mvpratio > 0 && !is.null(vdata)) {
+    if (search != "first"  && !is.null(cdata)) {
+      cdata<-data.frame(matrix(cdata, byrow = T, ncol=5, dimnames = list(NULL, c("angle", "axis", "cut_x", "maxrep", "ratio"))))
+      if (search == "wider") {
+        cdata<-cdata[cdata$maxrep == max(cdata$maxrep),]
+        cdata<-cdata[which.min(abs(0.5 - cdata$ratio)),]
+      } else {
+        cdata<-cdata[order(abs(0.5 - cdata$ratio)),]
+      }
+      cut_x<-cdata$cut_x[1]
+      cut_axis<-cdata$axis[1]
+      cut_angle<-cdata$angle[1]
+      x2<-x %*% matrix(c(cos(cut_angle), sin(cut_angle), -sin(cut_angle), cos(cut_angle)), ncol=2, byrow = T)
+    } else if (mvpratio > 0 && !is.null(vdata)) {
       vdata<-data.frame(matrix(vdata, byrow = T, ncol=6, dimnames = list(NULL, c("angle", "axis", "newx", "value", "maxval_before", "maxval_after"))))
       v_cuts<-vdata[vdata$value<=vdata$maxval_before*mvpratio & vdata$value<=vdata$maxval_after*mvpratio,]
       v_cuts$pvr1<-v_cuts$maxval_before/v_cuts$value
@@ -607,12 +626,8 @@ getdensdata<-function(x2, axis, minpts) {
         cut_angle<-v_cut$angle
         break
       }
-      if (is.null(cut_x)) {
-        if (ret_model){
-          return(list(cluster = rep(cluster, nrow(x[idxs,])), model = list(cluster="none")))
-        } else return(rep(cluster, nrow(x[idxs,])))
-      }
-    } else {
+    }
+    if (is.null(cut_x)) {
       if (ret_model){
         return(list(cluster = rep(cluster, nrow(x[idxs,])), model = list(cluster="none")))
       } else return(rep(cluster, nrow(x[idxs,])))
@@ -639,7 +654,7 @@ getdensdata<-function(x2, axis, minpts) {
       if (length(clust[clust == c]) < minpts*2) next
       nidxs<-idxs
       nidxs[idxs]<-nidxs[idxs] & (clust == c)
-      nclust<-.sdbscan(x, minpts = minpts, level = level+1, idxs = nidxs, cluster = c, maxlvl = maxlvl, alfa = alfa, bw = bw, nbins = nbins, theta = theta, mvpratio = mvpratio, ret_model = ret_model, plotcuts = plotcuts)
+      nclust<-.sdbscan(x, minpts = minpts, level = level+1, idxs = nidxs, cluster = c, maxlvl = maxlvl, alfa = alfa, bw = bw, nbins = nbins, theta = theta, mvpratio = mvpratio, search = search, ret_model = ret_model, plotcuts = plotcuts)
       if (ret_model) {
         if (nclust$model$cluster != "none") {
           cmodel<-c(cmodel, c)
@@ -673,8 +688,9 @@ getdensdata<-function(x2, axis, minpts) {
 #'
 #' @return A vector with cluster numbers. Length = nrow(x)
 #' @export
-sdbscan<-function(x, minpts = 100, maxlvl = 100, alfa = 0.05, bw = 0.25, nbins = 1, theta = 5, mvpratio = 0.5, ret_model = FALSE, plotcuts = FALSE) {  ### TODO: check parameters
-  clusters<-.sdbscan(x, minpts = minpts, maxlvl = maxlvl, alfa = alfa, bw = bw, nbins = nbins, theta = theta, mvpratio = mvpratio, ret_model = ret_model, plotcuts = plotcuts)
+sdbscan<-function(x, minpts = 100, maxlvl = 100, alfa = 0.05, bw = 0.25, nbins = 1, theta = 5, mvpratio = 0.5, search = c("first", "wider", "median"), ret_model = FALSE, plotcuts = FALSE) {  ### TODO: check parameters
+  search<-match.arg(search)
+  clusters<-.sdbscan(x, minpts = minpts, maxlvl = maxlvl, alfa = alfa, bw = bw, nbins = nbins, theta = theta, mvpratio = mvpratio, search = search, ret_model = ret_model, plotcuts = plotcuts)
   if (ret_model) {
     clusters_model<-clusters$model
     clusters<-clusters$cluster
