@@ -1,6 +1,6 @@
 #### clustering functions ####
 #### sequencial UMAP dim reduction and density based clustering ####
-.sumapc<-function(data, maxevts, maxlvl, minpts, clust_options, idxs = 1:(nrow(data))>0, lvl = 1, clust = "cluster", multi_thread = T, fast_sgd = T, ret_model = F, myqueue = NULL, verbose = verbose, seed = NULL) {
+.sumapc<-function(data, maxevts, maxlvl, minpts, clust_options, idxs = 1:(nrow(data))>0, lvl = 1, clust = "cluster", multi_thread = T, fast_sgd = T, ret_model = F, myqueue = NULL, verbose = verbose, seed = NULL, ...) {
   if (!is.null(seed)) set.seed(as.integer(seed))
   knn_needed<-FALSE
   if (!is.matrix(data[idxs,])) {
@@ -33,20 +33,20 @@
                       vdist<-sort(as.vector(FNN::knn.dist(embdata, minpts)))
                       x1<-length(vdist)-num_el
                       eps<-max(mineps, vdist[x1])
-                      res<-dbscan::dbscan(embdata, eps = eps, minPts = minpts)
+                      res<-dbscan::dbscan(embdata, eps = eps, minPts = minpts, ...)
                       if (any(res$cluster == 0)) clusters<-res$cluster + 1L else clusters<-res$cluster
                       clusters
                     },
                     "kdbscan" = {
-                      kdbscan(embdata, minpts = max(10,minpts*(nrow(embdata)/nrow(data[idxs,]))), mindens = mindens, ret_model = T)
+                      kdbscan(embdata, minpts = max(10,minpts*(nrow(embdata)/nrow(data[idxs,]))), mindens = mindens, ret_model = T, ...)
                     },
                     "hdbscan" = {
-                      res<-dbscan::hdbscan(embdata, minPts = minpts)
+                      res<-dbscan::hdbscan(embdata, minPts = minpts, ...)
                       if (any(res$cluster == 0)) clusters<-res$cluster + 1L else clusters<-res$cluster
                       clusters
                     },
                     "sdbscan" = {
-                      sdbscan(embdata, minpts = max(10,minpts*(nrow(embdata)/nrow(data[idxs,]))), bw = bw, nbins = nbins, mvpratio = mvpratio, ret_model = T)
+                      sdbscan(embdata, minpts = max(10,minpts*(nrow(embdata)/nrow(data[idxs,]))), bw = bw, nbins = nbins, mvpratio = mvpratio, ret_model = T, ...)
                     }
   )
   if (inherits(clusters, "s2dcluster")) {
@@ -83,9 +83,9 @@
       nidxs[idxs]<-nidxs[idxs] & (clusters == c)
       c<-c
       if (multi_thread) {
-        futureAssign(paste0("nclust", c), .sumapc(data, maxevts, maxlvl, minpts, clust_options, idxs = nidxs, lvl = lvl+1, clust = c, multi_thread = multi_thread, fast_sgd = fast_sgd, ret_model = ret_model, myqueue = myqueue, verbose = verbose, seed = seed), seed = T)
+        futureAssign(paste0("nclust", c), .sumapc(data, maxevts, maxlvl, minpts, clust_options, idxs = nidxs, lvl = lvl+1, clust = c, multi_thread = multi_thread, fast_sgd = fast_sgd, ret_model = ret_model, myqueue = myqueue, verbose = verbose, seed = seed, ...), seed = T)
       } else {
-        assign(paste0("nclust", c), .sumapc(data, maxevts, maxlvl, minpts, clust_options, idxs = nidxs, lvl = lvl+1, clust = c, multi_thread = multi_thread, fast_sgd = fast_sgd, ret_model = ret_model, myqueue = myqueue, verbose = verbose, seed = seed))
+        assign(paste0("nclust", c), .sumapc(data, maxevts, maxlvl, minpts, clust_options, idxs = nidxs, lvl = lvl+1, clust = c, multi_thread = multi_thread, fast_sgd = fast_sgd, ret_model = ret_model, myqueue = myqueue, verbose = verbose, seed = seed, ...))
       }
     }
     for (c in new_clusters) {
@@ -108,7 +108,7 @@
 }
 
 ### CUML version
-.cuml_sumapc<-function(data, maxevts, maxlvl, minpts, clust_options, idxs = 1:(nrow(data))>0, lvl = 1, clust = "cluster", multi_thread = T, ret_model = F, myqueue = NULL, verbose = verbose, cuml = NULL, seed = NULL) {
+.cuml_sumapc<-function(data, maxevts, maxlvl, minpts, clust_options, idxs = 1:(nrow(data))>0, lvl = 1, clust = "cluster", multi_thread = T, ret_model = F, myqueue = NULL, verbose = verbose, cuml = NULL, seed = NULL, ...) {
   if (!is.null(seed)) set.seed(as.integer(seed))
   knn_needed<-FALSE
   if (!is.matrix(data[idxs,])) {
@@ -143,20 +143,20 @@
                       vdist<-sort(as.vector(FNN::knn.dist(embdata, minpts)))
                       x1<-length(vdist)-num_el
                       eps<-max(mineps, vdist[x1])
-                      res<-dbscan::dbscan(embdata, eps = eps, minPts = minpts)
+                      res<-dbscan::dbscan(embdata, eps = eps, minPts = minpts, ...)
                       if (any(res$cluster == 0)) clusters<-res$cluster + 1L else clusters<-res$cluster
                       clusters
                     },
                     "kdbscan" = {
-                      kdbscan(embdata, minpts = max(10,minpts*(nrow(embdata)/nrow(data[idxs,]))), mindens = mindens, ret_model = T)
+                      kdbscan(embdata, minpts = max(10,minpts*(nrow(embdata)/nrow(data[idxs,]))), mindens = mindens, ret_model = T, ...)
                     },
                     "hdbscan" = {
-                      res<-dbscan::hdbscan(embdata, minPts = minpts)
+                      res<-dbscan::hdbscan(embdata, minPts = minpts, ...)
                       if (any(res$cluster == 0)) clusters<-res$cluster + 1L else clusters<-res$cluster
                       clusters
                     },
                     "sdbscan" = {
-                      sdbscan(embdata, minpts = max(10,minpts*(nrow(embdata)/nrow(data[idxs,]))), bw = bw, nbins = nbins, mvpratio = mvpratio, ret_model = T)
+                      sdbscan(embdata, minpts = max(10,minpts*(nrow(embdata)/nrow(data[idxs,]))), bw = bw, nbins = nbins, mvpratio = mvpratio, ret_model = T, ...)
                     }
   )
   if (inherits(clusters, "s2dcluster")) {
@@ -192,7 +192,7 @@
       nidxs<-idxs
       nidxs[idxs]<-nidxs[idxs] & (clusters == c)
       c<-c
-      assign(paste0("nclust", c), .cuml_sumapc(data, maxevts, maxlvl, minpts, clust_options, idxs = nidxs, lvl = lvl+1, clust = c, ret_model = ret_model, myqueue = myqueue, verbose = verbose, cuml = cuml, seed = seed))
+      assign(paste0("nclust", c), .cuml_sumapc(data, maxevts, maxlvl, minpts, clust_options, idxs = nidxs, lvl = lvl+1, clust = c, ret_model = ret_model, myqueue = myqueue, verbose = verbose, cuml = cuml, seed = seed, ...))
     }
     for (c in new_clusters) {
       if (ret_model) {
@@ -227,6 +227,7 @@
 #' @param verbose logical.
 #' @param use_cuml logical. Enable CUML GPU compute acceleration.
 #' @param seed Integer or NULL.
+#' @param ... aditional parameters passed to 2d clustering algorithm
 #'
 #' @details clust_options must be a named list containing:
 #'  method: one of "dbscan", "hdbscan", "kdbscan", "sdbscan"
@@ -239,7 +240,7 @@
 #' @return A vector of cluster numbers with length = nrow(data)
 #' @import grDevices graphics stats utils future
 #' @export
-sumapc<-function(data, maxevts = 10000L, maxlvl = 3L, minpts = 100L, clust_options = list(method = "sdbscan", mineps = 1, mindens = 0.1, bw = 0.05, nbins = 5, mvpratio = 0.5), multi_thread = TRUE, fast_sgd = TRUE, ret_model = FALSE, myqueue = NULL, verbose = FALSE, use_cuml = FALSE, seed = NULL) {
+sumapc<-function(data, maxevts = 10000L, maxlvl = 3L, minpts = 100L, clust_options = list(method = "sdbscan", mineps = 1, mindens = 0.1, bw = 0.05, nbins = 5, mvpratio = 0.5), multi_thread = TRUE, fast_sgd = TRUE, ret_model = FALSE, myqueue = NULL, verbose = FALSE, use_cuml = FALSE, seed = NULL, ...) {
   if (!is.null(seed)) if (!is.numeric(seed)) stop("Seed must be a integer", call. = F)
   if (multi_thread && !("package:future" %in% search())) stop("future package needed for multi_thread work. Try library(future).", call. = F)
   if (ret_model) {
@@ -250,9 +251,9 @@ sumapc<-function(data, maxevts = 10000L, maxlvl = 3L, minpts = 100L, clust_optio
       cuml<-try(reticulate::import("cuml"), silent = T)
       if (inherits(cuml, "try-error")) stop("CUML is needed!!! Set use_cuml = F to disable cuml acceleration.", call. = F)
     } else stop("Reticulate package is needed for cuml interface! Set use_cuml = F to disable cuml acceleration.", call. = F)
-    clusters<-.cuml_sumapc(data = data, maxevts = maxevts, maxlvl = maxlvl, minpts = minpts, clust_options = clust_options, ret_model = ret_model, myqueue = myqueue, verbose = verbose, cuml = cuml, seed = seed)
+    clusters<-.cuml_sumapc(data = data, maxevts = maxevts, maxlvl = maxlvl, minpts = minpts, clust_options = clust_options, ret_model = ret_model, myqueue = myqueue, verbose = verbose, cuml = cuml, seed = seed, ...)
   } else {
-    clusters<-.sumapc(data = data, maxevts = maxevts, maxlvl = maxlvl, minpts = minpts, clust_options = clust_options, multi_thread = multi_thread, fast_sgd = fast_sgd, ret_model = ret_model, myqueue = myqueue, verbose = verbose, seed = seed)
+    clusters<-.sumapc(data = data, maxevts = maxevts, maxlvl = maxlvl, minpts = minpts, clust_options = clust_options, multi_thread = multi_thread, fast_sgd = fast_sgd, ret_model = ret_model, myqueue = myqueue, verbose = verbose, seed = seed, ...)
   }
   if (ret_model) {
     clusters_model<-clusters$model
@@ -683,6 +684,7 @@ getdensdata<-function(x2, axis, minpts) {
 #' @param nbins min number of bins to search.
 #' @param theta integer. Angle of rotation in each step.
 #' @param mvpratio max valley/peaks value to allow cut.
+#' @param search Cut point search method. "first" returns the first cut valid cut point found, "wider" the point with max bins with no points and "median" the point closer to the center of the distribution.
 #' @param ret_model logical.
 #' @param plotcuts logical; plot data with histograms and cut point.
 #'

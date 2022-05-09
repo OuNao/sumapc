@@ -17,7 +17,8 @@ sumapc(
   myqueue = NULL,
   verbose = FALSE,
   use_cuml = FALSE,
-  seed = NULL
+  seed = NULL,
+  ...
 )
 }
 \arguments{
@@ -44,6 +45,8 @@ sumapc(
 \item{use_cuml}{logical. Enable CUML GPU compute acceleration.}
 
 \item{seed}{Integer or NULL.}
+
+\item{...}{aditional parameters passed to 2d clustering algorithm}
 }
 \value{
 A vector of cluster numbers with length = nrow(data)

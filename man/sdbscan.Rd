@@ -13,6 +13,7 @@ sdbscan(
   nbins = 1,
   theta = 5,
   mvpratio = 0.5,
+  search = c("first", "wider", "median"),
   ret_model = FALSE,
   plotcuts = FALSE
 )
@@ -33,6 +34,8 @@ sdbscan(
 \item{theta}{integer. Angle of rotation in each step.}
 
 \item{mvpratio}{max valley/peaks value to allow cut.}
+
+\item{search}{Cut point search method. "first" returns the first cut valid cut point found, "wider" the point with max bins with no points and "median" the point closer to the center of the distribution.}
 
 \item{ret_model}{logical.}
 
