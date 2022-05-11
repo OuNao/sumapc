@@ -46,7 +46,7 @@ sumapc(
 
 \item{seed}{Integer or NULL.}
 
-\item{...}{aditional parameters passed to 2d clustering algorithm}
+\item{...}{additional parameters passed to UMAP}
 }
 \value{
 A vector of cluster numbers with length = nrow(data)
@@ -62,4 +62,5 @@ clust_options must be a named list containing:
  bw: bw passed to sdbscan
  nbins: min number of bins of bw width
  mvpratio: max valley/peak ratio)
+ Any other value is passed as is to the clustering method.
 }

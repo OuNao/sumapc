@@ -17,36 +17,57 @@
     datasample<-sample(1:nrow(data[idxs,]), maxevts, replace = FALSE)
     knn_needed<-T
   } else datasample<-1:nrow(data[idxs,])
-  method = clust_options$method
-  mineps = clust_options$mineps
-  mindens = clust_options$mindens
-  bw = clust_options$bw
-  nbins = clust_options$nbins
-  mvpratio = clust_options$mvpratio
   # UMAP modeling
   umap_model<-uwot::umap(data[idxs,][datasample,], scale = FALSE, n_threads = ifelse(multi_thread, RcppParallel::defaultNumThreads(), 1), fast_sgd = fast_sgd, ret_model = T, verbose = verbose)
   embdata<-umap_model$embedding
   # clustering UMAP embedding
+  method = clust_options$method
+  clust_options$method<-NULL
+  mineps = clust_options$mineps
+  clust_options$mineps<-NULL
   clusters<-switch (method,
                     "dbscan" = {
                       num_el<-nrow(embdata)
                       vdist<-sort(as.vector(FNN::knn.dist(embdata, minpts)))
                       x1<-length(vdist)-num_el
                       eps<-max(mineps, vdist[x1])
-                      res<-dbscan::dbscan(embdata, eps = eps, minPts = minpts, ...)
+                      clust_options$mindens<-NULL
+                      clust_options$bw<-NULL
+                      clust_options$nbins<-NULL
+                      clust_options$mvpratio<-NULL
+                      clust_options$x<-embdata
+                      clust_options$minpts<-minpts
+                      clust_options$eps<-eps
+                      res<-do.call(dbscan::dbscan, clust_options)
                       if (any(res$cluster == 0)) clusters<-res$cluster + 1L else clusters<-res$cluster
                       clusters
                     },
                     "kdbscan" = {
-                      kdbscan(embdata, minpts = max(10,minpts*(nrow(embdata)/nrow(data[idxs,]))), mindens = mindens, ret_model = T, ...)
+                      clust_options$bw<-NULL
+                      clust_options$nbins<-NULL
+                      clust_options$mvpratio<-NULL
+                      clust_options$x<-embdata
+                      clust_options$minpts<-max(10,minpts*(nrow(embdata)/nrow(data[idxs,])))
+                      clust_options$ret_model<-TRUE
+                      do.call(kdbscan, clust_options)
                     },
                     "hdbscan" = {
-                      res<-dbscan::hdbscan(embdata, minPts = minpts, ...)
+                      clust_options$mindens<-NULL
+                      clust_options$bw<-NULL
+                      clust_options$nbins<-NULL
+                      clust_options$mvpratio<-NULL
+                      clust_options$x<-embdata
+                      clust_options$minPts<-minpts
+                      res<-do.call(dbscan::hdbscan, clust_options)
                       if (any(res$cluster == 0)) clusters<-res$cluster + 1L else clusters<-res$cluster
                       clusters
                     },
                     "sdbscan" = {
-                      sdbscan(embdata, minpts = max(10,minpts*(nrow(embdata)/nrow(data[idxs,]))), bw = bw, nbins = nbins, mvpratio = mvpratio, ret_model = T, ...)
+                      clust_options$mindens<-NULL
+                      clust_options$x<-embdata
+                      clust_options$minpts<-max(10,minpts*(nrow(embdata)/nrow(data[idxs,])))
+                      clust_options$ret_model<-TRUE
+                      do.call(sdbscan, clust_options)
                     }
   )
   if (inherits(clusters, "s2dcluster")) {
@@ -125,38 +146,59 @@
     datasample<-sample(1:nrow(data[idxs,]), maxevts, replace = FALSE)
     knn_needed<-T
   } else datasample<-1:nrow(data[idxs,])
-  method = clust_options$method
-  mineps = clust_options$mineps
-  mindens = clust_options$mindens
-  bw = clust_options$bw
-  nbins = clust_options$nbins
-  mvpratio = clust_options$mvpratio
   # UMAP modeling
   if (!is.null(seed)) {
     umap_model<-cuml$UMAP(n_epochs = 500L, random_state = as.integer(seed))$fit(data[idxs,][datasample,])
   } else umap_model<-cuml$UMAP(n_epochs = 500L)$fit(data[idxs,][datasample,])
   embdata<-umap_model$embedding_
   # clustering UMAP embedding
+  method = clust_options$method
+  clust_options$method<-NULL
+  mineps = clust_options$mineps
+  clust_options$mineps<-NULL
   clusters<-switch (method,
                     "dbscan" = {
                       num_el<-nrow(embdata)
                       vdist<-sort(as.vector(FNN::knn.dist(embdata, minpts)))
                       x1<-length(vdist)-num_el
                       eps<-max(mineps, vdist[x1])
-                      res<-dbscan::dbscan(embdata, eps = eps, minPts = minpts, ...)
+                      clust_options$mindens<-NULL
+                      clust_options$bw<-NULL
+                      clust_options$nbins<-NULL
+                      clust_options$mvpratio<-NULL
+                      clust_options$x<-embdata
+                      clust_options$minpts<-minpts
+                      clust_options$eps<-eps
+                      res<-do.call(dbscan::dbscan, clust_options)
                       if (any(res$cluster == 0)) clusters<-res$cluster + 1L else clusters<-res$cluster
                       clusters
                     },
                     "kdbscan" = {
-                      kdbscan(embdata, minpts = max(10,minpts*(nrow(embdata)/nrow(data[idxs,]))), mindens = mindens, ret_model = T, ...)
+                      clust_options$bw<-NULL
+                      clust_options$nbins<-NULL
+                      clust_options$mvpratio<-NULL
+                      clust_options$x<-embdata
+                      clust_options$minpts<-max(10,minpts*(nrow(embdata)/nrow(data[idxs,])))
+                      clust_options$ret_model<-TRUE
+                      do.call(kdbscan, clust_options)
                     },
                     "hdbscan" = {
-                      res<-dbscan::hdbscan(embdata, minPts = minpts, ...)
+                      clust_options$mindens<-NULL
+                      clust_options$bw<-NULL
+                      clust_options$nbins<-NULL
+                      clust_options$mvpratio<-NULL
+                      clust_options$x<-embdata
+                      clust_options$minPts<-minpts
+                      res<-do.call(dbscan::hdbscan, clust_options)
                       if (any(res$cluster == 0)) clusters<-res$cluster + 1L else clusters<-res$cluster
                       clusters
                     },
                     "sdbscan" = {
-                      sdbscan(embdata, minpts = max(10,minpts*(nrow(embdata)/nrow(data[idxs,]))), bw = bw, nbins = nbins, mvpratio = mvpratio, ret_model = T, ...)
+                      clust_options$mindens<-NULL
+                      clust_options$x<-embdata
+                      clust_options$minpts<-max(10,minpts*(nrow(embdata)/nrow(data[idxs,])))
+                      clust_options$ret_model<-TRUE
+                      do.call(sdbscan, clust_options)
                     }
   )
   if (inherits(clusters, "s2dcluster")) {
@@ -227,7 +269,7 @@
 #' @param verbose logical.
 #' @param use_cuml logical. Enable CUML GPU compute acceleration.
 #' @param seed Integer or NULL.
-#' @param ... aditional parameters passed to 2d clustering algorithm
+#' @param ... additional parameters passed to UMAP
 #'
 #' @details clust_options must be a named list containing:
 #'  method: one of "dbscan", "hdbscan", "kdbscan", "sdbscan"
@@ -236,6 +278,7 @@
 #'  bw: bw passed to sdbscan
 #'  nbins: min number of bins of bw width
 #'  mvpratio: max valley/peak ratio)
+#'  Any other value is passed as is to the clustering method.
 #'
 #' @return A vector of cluster numbers with length = nrow(data)
 #' @import grDevices graphics stats utils future
