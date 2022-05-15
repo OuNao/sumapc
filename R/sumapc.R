@@ -18,7 +18,7 @@
     knn_needed<-T
   } else datasample<-1:nrow(data[idxs,])
   # UMAP modeling
-  umap_model<-uwot::umap(data[idxs,][datasample,], scale = FALSE, n_threads = ifelse(multi_thread, RcppParallel::defaultNumThreads(), 1), fast_sgd = fast_sgd, ret_model = T, verbose = verbose)
+  umap_model<-uwot::umap(data[idxs,][datasample,], scale = FALSE, n_threads = ifelse(multi_thread, RcppParallel::defaultNumThreads(), 1), fast_sgd = fast_sgd, ret_model = T, verbose = verbose, ...)
   embdata<-umap_model$embedding
   # clustering UMAP embedding
   method = clust_options$method
@@ -148,8 +148,8 @@
   } else datasample<-1:nrow(data[idxs,])
   # UMAP modeling
   if (!is.null(seed)) {
-    umap_model<-cuml$UMAP(n_epochs = 500L, random_state = as.integer(seed))$fit(data[idxs,][datasample,])
-  } else umap_model<-cuml$UMAP(n_epochs = 500L)$fit(data[idxs,][datasample,])
+    umap_model<-cuml$UMAP(n_epochs = 500L, random_state = as.integer(seed), ...)$fit(data[idxs,][datasample,])
+  } else umap_model<-cuml$UMAP(n_epochs = 500L, ...)$fit(data[idxs,][datasample,])
   embdata<-umap_model$embedding_
   # clustering UMAP embedding
   method = clust_options$method
