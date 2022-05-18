@@ -21,6 +21,7 @@
   umap_model<-uwot::umap(data[idxs,][datasample,], scale = FALSE, n_threads = ifelse(multi_thread, RcppParallel::defaultNumThreads(), 1), fast_sgd = fast_sgd, ret_model = T, verbose = verbose, ...)
   embdata<-umap_model$embedding
   # clustering UMAP embedding
+  clust_options_bak<-clust_options
   method = clust_options$method
   clust_options$method<-NULL
   mineps = clust_options$mineps
@@ -70,6 +71,7 @@
                       do.call(sdbscan, clust_options)
                     }
   )
+  clust_options<-clust_options_bak
   if (inherits(clusters, "s2dcluster")) {
     cl_model<-clusters
     clusters<-clusters$cluster
