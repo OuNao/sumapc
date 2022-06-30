@@ -266,7 +266,7 @@
 #' @param maxlvl max sequential levels to process.
 #' @param minpts min cluster size.
 #' @param clust_options list; 2d clustering options (see Details).
-#' @param multi_thread logical. Needs \link[future]{future} package loaded and multisession plan selected.
+#' @param multi_thread logical. Needs \link[future]{future} package loaded and multisession plan selected. Only used if use_cuml = FALSE.
 #' @param fast_sgd logical; see \link[uwot]{umap}.
 #' @param ret_model logical; should clustering model be exported.
 #' @param myqueue shinyQueue object. Multithreaded code use \link[future]{future} package. This object is used to send log messages to the base worker. See \link[ipc]{shinyQueue}.
@@ -289,7 +289,7 @@
 #' @export
 sumapc<-function(data, maxevts = 10000L, maxlvl = 3L, minpts = 100L, clust_options = list(method = "sdbscan", mineps = 1, mindens = 0.1, bw = 0.05, nbins = 5, mvpratio = 0.5), multi_thread = TRUE, fast_sgd = TRUE, ret_model = FALSE, myqueue = NULL, verbose = FALSE, use_cuml = FALSE, seed = NULL, ...) {
   if (!is.null(seed)) if (!is.numeric(seed)) stop("Seed must be a integer", call. = F)
-  if (multi_thread && !("package:future" %in% search())) stop("future package needed for multi_thread work. Try library(future).", call. = F)
+  if (!use_cuml && multi_thread && !("package:future" %in% search())) stop("future package needed for multi_thread work. Try library(future).", call. = F)
   if (ret_model) {
     if (!(clust_options$method %in% c("sdbscan", "kdbscan"))) stop("ret_model needs sdbscan or kdbscan clustering method!", call. = F)
   }
