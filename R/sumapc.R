@@ -154,6 +154,7 @@
   } else umap_model<-cuml$UMAP(n_epochs = 500L, ...)$fit(data[idxs,][datasample,])
   embdata<-umap_model$embedding_
   # clustering UMAP embedding
+  clust_options_bak<-clust_options
   method = clust_options$method
   clust_options$method<-NULL
   mineps = clust_options$mineps
@@ -203,6 +204,7 @@
                       do.call(sdbscan, clust_options)
                     }
   )
+  clust_options<-clust_options_bak
   if (inherits(clusters, "s2dcluster")) {
     cl_model<-clusters
     clusters<-clusters$cluster
