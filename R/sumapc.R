@@ -1,6 +1,6 @@
 #### clustering functions ####
 #### sequencial UMAP dim reduction and density based clustering ####
-.sumapc<-function(data, maxevts, maxlvl, minpts, clust_options, idxs = 1:(nrow(data))>0, lvl = 1, clust = "cluster", multi_thread = T, use_futures = T, fast_sgd = T, ret_model = F, myqueue = NULL, verbose = verbose, seed = NULL, ...) {
+.sumapc<-function(data, maxevts, transform_maxevts = 1000000L, maxlvl, minpts, clust_options, idxs = 1:(nrow(data))>0, lvl = 1, clust = "cluster", multi_thread = T, use_futures = T, fast_sgd = T, ret_model = F, myqueue = NULL, verbose = verbose, seed = NULL, ...) {
   if (!is.null(seed)) set.seed(as.integer(seed))
   knn_needed<-FALSE
   if (!is.matrix(data[idxs,])) {
@@ -79,7 +79,16 @@
   # cluster not sampled data
   if (length(unique(clusters)) > 1) {
     if (knn_needed) {
-      new_embdata<-uwot::umap_transform(data[idxs,][-datasample,], umap_model, n_threads = ifelse(multi_thread, RcppParallel::defaultNumThreads(), 1), verbose = verbose)
+      totalL <- nrow(data[idxs,][-datasample,])
+      new_embdata <- matrix(NA_integer_, nrow = totalL, ncol = 2)
+      startL <- 1
+      endL <- 1
+      while (endL < totalL) {
+        endL <- (startL + transform_maxevts - 1)
+        if (endL > totalL) endL<-totalL
+        new_embdata[startL:endL,]<-uwot::umap_transform(data[idxs,][-datasample,][startL:endL,], umap_model, n_threads = ifelse(multi_thread, RcppParallel::defaultNumThreads(), 1), verbose = verbose)
+        startL <- (endL + 1)
+      }
       if (is.null(cl_model)){
         knn<-FNN::get.knnx(embdata, new_embdata, k=1)
         newclusters<-clusters[knn$nn.index]
@@ -111,9 +120,9 @@
       nidxs[idxs]<-nidxs[idxs] & (clusters == c)
       c<-c
       if (use_futures) {
-        futureAssign(paste0("nclust", c), .sumapc(data, maxevts, maxlvl, minpts, clust_options, idxs = nidxs, lvl = lvl+1, clust = c, multi_thread = multi_thread, use_futures = use_futures, fast_sgd = fast_sgd, ret_model = ret_model, myqueue = myqueue, verbose = verbose, seed = seed, ...), seed = T)
+        futureAssign(paste0("nclust", c), .sumapc(data, maxevts, transform_maxevts = transform_maxevts, maxlvl, minpts, clust_options, idxs = nidxs, lvl = lvl+1, clust = c, multi_thread = multi_thread, use_futures = use_futures, fast_sgd = fast_sgd, ret_model = ret_model, myqueue = myqueue, verbose = verbose, seed = seed, ...), seed = T)
       } else {
-        assign(paste0("nclust", c), .sumapc(data, maxevts, maxlvl, minpts, clust_options, idxs = nidxs, lvl = lvl+1, clust = c, multi_thread = multi_thread, use_futures = use_futures, fast_sgd = fast_sgd, ret_model = ret_model, myqueue = myqueue, verbose = verbose, seed = seed, ...))
+        assign(paste0("nclust", c), .sumapc(data, maxevts, transform_maxevts = transform_maxevts, maxlvl, minpts, clust_options, idxs = nidxs, lvl = lvl+1, clust = c, multi_thread = multi_thread, use_futures = use_futures, fast_sgd = fast_sgd, ret_model = ret_model, myqueue = myqueue, verbose = verbose, seed = seed, ...))
       }
     }
     for (c in new_clusters) {
@@ -150,7 +159,7 @@
 }
 
 ### CUML version
-.cuml_sumapc<-function(data, maxevts, maxlvl, minpts, clust_options, idxs = 1:(nrow(data))>0, lvl = 1, clust = "cluster", multi_thread = T, ret_model = F, myqueue = NULL, verbose = verbose, cuml = NULL, seed = NULL, ...) {
+.cuml_sumapc<-function(data, maxevts, transform_maxevts = 1000000L, maxlvl, minpts, clust_options, idxs = 1:(nrow(data))>0, lvl = 1, clust = "cluster", multi_thread = T, ret_model = F, myqueue = NULL, verbose = verbose, cuml = NULL, seed = NULL, ...) {
   if (!is.null(seed)) set.seed(as.integer(seed))
   knn_needed<-FALSE
   if (!is.matrix(data[idxs,])) {
@@ -168,9 +177,8 @@
     knn_needed<-T
   } else datasample<-1:nrow(data[idxs,])
   # UMAP modeling
-  if (!is.null(seed)) {
-    umap_model<-cuml$UMAP(n_epochs = 500L, random_state = as.integer(seed), verbose = verbose, ...)$fit(data[idxs,][datasample,])
-  } else umap_model<-cuml$UMAP(n_epochs = 500L, verbose = verbose, ...)$fit(data[idxs,][datasample,])
+  if (!is.null(seed)) random_state = as.integer(seed) else random_state = "None"
+  umap_model<-cuml$UMAP(n_epochs = 500L, random_state = random_state, verbose = verbose, ...)$fit(data[idxs,][datasample,])
   embdata<-umap_model$embedding_
   # clustering UMAP embedding
   clust_options_bak<-clust_options
@@ -231,7 +239,16 @@
   # cluster not sampled data
   if (length(unique(clusters)) > 1) {
     if (knn_needed) {
-      new_embdata<-umap_model$transform(data[idxs,][-datasample,])
+      totalL <- nrow(data[idxs,][-datasample,])
+      new_embdata <- matrix(NA_integer_, nrow = totalL, ncol = 2)
+      startL <- 1
+      endL <- 1
+      while (endL < totalL) {
+        endL <- (startL + transform_maxevts - 1)
+        if (endL > totalL) endL<-totalL
+        new_embdata[startL:endL,]<-umap_model$transform(data[idxs,][-datasample,][startL:endL,])
+        startL <- (endL + 1)
+      }
       if (is.null(cl_model)){
         knn<-FNN::get.knnx(embdata, new_embdata, k=1) # TODO: use cuml here too!
         newclusters<-clusters[knn$nn.index]
@@ -262,7 +279,7 @@
       nidxs<-idxs
       nidxs[idxs]<-nidxs[idxs] & (clusters == c)
       c<-c
-      assign(paste0("nclust", c), .cuml_sumapc(data, maxevts, maxlvl, minpts, clust_options, idxs = nidxs, lvl = lvl+1, clust = c, ret_model = ret_model, myqueue = myqueue, verbose = verbose, cuml = cuml, seed = seed, ...))
+      assign(paste0("nclust", c), .cuml_sumapc(data, maxevts, transform_maxevts = transform_maxevts, maxlvl, minpts, clust_options, idxs = nidxs, lvl = lvl+1, clust = c, ret_model = ret_model, myqueue = myqueue, verbose = verbose, cuml = cuml, seed = seed, ...))
     }
     for (c in new_clusters) {
       if (ret_model) {
@@ -301,6 +318,7 @@
 #'
 #' @param data a data matrix.
 #' @param maxevts max number of random points to apply UMAP.
+#' @param transform_maxevts max number of points to apply UMAP transform. The points not used in the initial UMAP model are divided in batches of transform_maxevts points to apply UMAP transform. Lower value = lower memory usage.
 #' @param maxlvl max sequential levels to process.
 #' @param minpts min cluster size.
 #' @param clust_options list; 2d clustering options (see Details).
@@ -325,7 +343,7 @@
 #' @return A vector of cluster numbers with length = nrow(data)
 #' @import grDevices graphics stats utils future
 #' @export
-sumapc<-function(data, maxevts = 10000L, maxlvl = 3L, minpts = 100L, clust_options = list(method = "sdbscan", mineps = 1, mindens = 0.1, bw = 0.05, nbins = 5, mvpratio = 0.5), multi_thread = TRUE, fast_sgd = TRUE, ret_model = FALSE, myqueue = NULL, verbose = FALSE, use_cuml = FALSE, seed = NULL, ...) {
+sumapc<-function(data, maxevts = 10000L, transform_maxevts = 1000000L, maxlvl = 3L, minpts = 100L, clust_options = list(method = "sdbscan", mineps = 1, mindens = 0.1, bw = 0.05, nbins = 5, mvpratio = 0.5), multi_thread = TRUE, fast_sgd = TRUE, ret_model = FALSE, myqueue = NULL, verbose = FALSE, use_cuml = FALSE, seed = NULL, ...) {
   if (!is.null(seed)) if (!is.numeric(seed)) stop("Seed must be a integer", call. = F)
   if (!use_cuml) {
     if (multi_thread && !("package:future" %in% search())) {
@@ -341,9 +359,9 @@ sumapc<-function(data, maxevts = 10000L, maxlvl = 3L, minpts = 100L, clust_optio
       cuml<-try(reticulate::import("cuml"), silent = T)
       if (inherits(cuml, "try-error")) stop("CUML is needed!!! Set use_cuml = F to disable cuml acceleration.", call. = F)
     } else stop("Reticulate package is needed for cuml interface! Set use_cuml = F to disable cuml acceleration.", call. = F)
-    clusters<-.cuml_sumapc(data = data, maxevts = maxevts, maxlvl = maxlvl, minpts = minpts, clust_options = clust_options, ret_model = ret_model, myqueue = myqueue, verbose = verbose, cuml = cuml, seed = seed, ...)
+    clusters<-.cuml_sumapc(data = data, maxevts = maxevts, transform_maxevts = transform_maxevts, maxlvl = maxlvl, minpts = minpts, clust_options = clust_options, ret_model = ret_model, myqueue = myqueue, verbose = verbose, cuml = cuml, seed = seed, ...)
   } else {
-    clusters<-.sumapc(data = data, maxevts = maxevts, maxlvl = maxlvl, minpts = minpts, clust_options = clust_options, multi_thread = multi_thread, use_futures = use_futures, fast_sgd = fast_sgd, ret_model = ret_model, myqueue = myqueue, verbose = verbose, seed = seed, ...)
+    clusters<-.sumapc(data = data, maxevts = maxevts, transform_maxevts = transform_maxevts, maxlvl = maxlvl, minpts = minpts, clust_options = clust_options, multi_thread = multi_thread, use_futures = use_futures, fast_sgd = fast_sgd, ret_model = ret_model, myqueue = myqueue, verbose = verbose, seed = seed, ...)
   }
   if (ret_model) {
     clusters_model<-clusters$model
