@@ -1,6 +1,6 @@
 #### clustering functions ####
 #### sequencial UMAP dim reduction and density based clustering ####
-.sumapc<-function(data, maxevts, maxlvl, minpts, clust_options, idxs = 1:(nrow(data))>0, lvl = 1, clust = "cluster", multi_thread = T, fast_sgd = T, ret_model = F, myqueue = NULL, verbose = verbose, seed = NULL, ...) {
+.sumapc<-function(data, maxevts, maxlvl, minpts, clust_options, idxs = 1:(nrow(data))>0, lvl = 1, clust = "cluster", multi_thread = T, use_futures = T, fast_sgd = T, ret_model = F, myqueue = NULL, verbose = verbose, seed = NULL, ...) {
   if (!is.null(seed)) set.seed(as.integer(seed))
   knn_needed<-FALSE
   if (!is.matrix(data[idxs,])) {
@@ -100,15 +100,20 @@
   }
   newmodels<-list()
   if ((maxlvl > lvl) && length(new_clusters) > 1) {
-    if (!is.null(myqueue)) myqueue$producer$fireAssignReactive("umap_dbs_msg", paste0("Found ", length(new_clusters), " new clusters on ", clust, " (level ", lvl, "). Trying deeper levels."))
+    if (!is.null(myqueue)) {
+      myqueue$producer$fireAssignReactive("umap_dbs_msg", paste0("Found ", length(new_clusters), " new clusters on ", clust, " (level ", lvl, "). Trying deeper levels."))
+    }
+    if (verbose) {
+      cat(paste0("Found ", length(new_clusters), " new clusters on ", clust, " (level ", lvl, "). Trying deeper levels.\n"))
+    }
     for (c in new_clusters) {
       nidxs<-idxs
       nidxs[idxs]<-nidxs[idxs] & (clusters == c)
       c<-c
-      if (multi_thread) {
-        futureAssign(paste0("nclust", c), .sumapc(data, maxevts, maxlvl, minpts, clust_options, idxs = nidxs, lvl = lvl+1, clust = c, multi_thread = multi_thread, fast_sgd = fast_sgd, ret_model = ret_model, myqueue = myqueue, verbose = verbose, seed = seed, ...), seed = T)
+      if (use_futures) {
+        futureAssign(paste0("nclust", c), .sumapc(data, maxevts, maxlvl, minpts, clust_options, idxs = nidxs, lvl = lvl+1, clust = c, multi_thread = multi_thread, use_futures = use_futures, fast_sgd = fast_sgd, ret_model = ret_model, myqueue = myqueue, verbose = verbose, seed = seed, ...), seed = T)
       } else {
-        assign(paste0("nclust", c), .sumapc(data, maxevts, maxlvl, minpts, clust_options, idxs = nidxs, lvl = lvl+1, clust = c, multi_thread = multi_thread, fast_sgd = fast_sgd, ret_model = ret_model, myqueue = myqueue, verbose = verbose, seed = seed, ...))
+        assign(paste0("nclust", c), .sumapc(data, maxevts, maxlvl, minpts, clust_options, idxs = nidxs, lvl = lvl+1, clust = c, multi_thread = multi_thread, use_futures = use_futures, fast_sgd = fast_sgd, ret_model = ret_model, myqueue = myqueue, verbose = verbose, seed = seed, ...))
       }
     }
     for (c in new_clusters) {
@@ -118,8 +123,22 @@
         newmodels[[c]]<-tempclust$model
       } else clusters[clusters == c]<-get(paste0("nclust", c))
     }
-  } else if (!is.null(myqueue)) myqueue$producer$fireAssignReactive("umap_dbs_msg", paste0("Found only 1 cluster on ", clust, " (level ", lvl, ") or no deeper level allowed. Skipping deeper levels on this cluster."))
-  if (lvl == 1) if (!is.null(myqueue)) myqueue$producer$fireAssignReactive("umap_dbs_msg", paste0("Found a total of ", length(unique(clusters)), " clusters."))
+  } else {
+    if (!is.null(myqueue)) {
+      myqueue$producer$fireAssignReactive("umap_dbs_msg", paste0("Found only 1 cluster on ", clust, " (level ", lvl, ") or no deeper level allowed. Skipping deeper levels on this cluster."))
+    }
+    if (verbose) {
+      cat(paste0("Found only 1 cluster on ", clust, " (level ", lvl, ") or no deeper level allowed. Skipping deeper levels on this cluster.\n"))
+    }
+  }
+  if (lvl == 1) {
+    if (!is.null(myqueue)) {
+      myqueue$producer$fireAssignReactive("umap_dbs_msg", paste0("Found a total of ", length(unique(clusters)), " clusters."))
+    }
+    if (verbose) {
+      cat(paste0("Found a total of ", length(unique(clusters)), " clusters.\n"))
+    }
+  }
   if (ret_model) {
     umap_file<-tempfile()
     uwot::save_uwot(umap_model, umap_file)
@@ -150,8 +169,8 @@
   } else datasample<-1:nrow(data[idxs,])
   # UMAP modeling
   if (!is.null(seed)) {
-    umap_model<-cuml$UMAP(n_epochs = 500L, random_state = as.integer(seed), ...)$fit(data[idxs,][datasample,])
-  } else umap_model<-cuml$UMAP(n_epochs = 500L, ...)$fit(data[idxs,][datasample,])
+    umap_model<-cuml$UMAP(n_epochs = 500L, random_state = as.integer(seed), verbose = verbose, ...)$fit(data[idxs,][datasample,])
+  } else umap_model<-cuml$UMAP(n_epochs = 500L, verbose = verbose, ...)$fit(data[idxs,][datasample,])
   embdata<-umap_model$embedding_
   # clustering UMAP embedding
   clust_options_bak<-clust_options
@@ -233,7 +252,12 @@
   }
   newmodels<-list()
   if ((maxlvl > lvl) && length(new_clusters) > 1) {
-    if (!is.null(myqueue)) myqueue$producer$fireAssignReactive("umap_dbs_msg", paste0("Found ", length(new_clusters), " new clusters on ", clust, " (level ", lvl, "). Trying deeper levels."))
+    if (!is.null(myqueue)) {
+      myqueue$producer$fireAssignReactive("umap_dbs_msg", paste0("Found ", length(new_clusters), " new clusters on ", clust, " (level ", lvl, "). Trying deeper levels."))
+    }
+    if (verbose){
+      cat(paste0("Found ", length(new_clusters), " new clusters on ", clust, " (level ", lvl, "). Trying deeper levels.\n"))
+    }
     for (c in new_clusters) {
       nidxs<-idxs
       nidxs[idxs]<-nidxs[idxs] & (clusters == c)
@@ -247,8 +271,22 @@
         newmodels[[c]]<-tempclust$model
       } else clusters[clusters == c]<-get(paste0("nclust", c))
     }
-  } else if (!is.null(myqueue)) myqueue$producer$fireAssignReactive("umap_dbs_msg", paste0("Found only 1 cluster on ", clust, " (level ", lvl, ") or no deeper level allowed. Skipping deeper levels on this cluster."))
-  if (lvl == 1) if (!is.null(myqueue)) myqueue$producer$fireAssignReactive("umap_dbs_msg", paste0("Found a total of ", length(unique(clusters)), " clusters."))
+  } else {
+    if (!is.null(myqueue)) {
+      myqueue$producer$fireAssignReactive("umap_dbs_msg", paste0("Found only 1 cluster on ", clust, " (level ", lvl, ") or no deeper level allowed. Skipping deeper levels on this cluster."))
+    }
+    if (verbose){
+      cat(paste0("Found only 1 cluster on ", clust, " (level ", lvl, ") or no deeper level allowed. Skipping deeper levels on this cluster.\n"))
+    }
+  }
+  if (lvl == 1) {
+    if (!is.null(myqueue)) {
+      myqueue$producer$fireAssignReactive("umap_dbs_msg", paste0("Found a total of ", length(unique(clusters)), " clusters."))
+    }
+    if (verbose) {
+      cat(paste0("Found a total of ", length(unique(clusters)), " clusters.\n"))
+    }
+  }
   if (ret_model) {
     umap_file<-tempfile()
     reticulate::py_save_object(umap_model, umap_file)
@@ -266,7 +304,7 @@
 #' @param maxlvl max sequential levels to process.
 #' @param minpts min cluster size.
 #' @param clust_options list; 2d clustering options (see Details).
-#' @param multi_thread logical. Needs \link[future]{future} package loaded and multisession plan selected. Only used if use_cuml = FALSE.
+#' @param multi_thread logical. Needs \link[future]{future} package loaded and multisession plan selected to use parallel clustering (not only multithreading in UMAP). Only used if use_cuml = FALSE.
 #' @param fast_sgd logical; see \link[uwot]{umap}.
 #' @param ret_model logical; should clustering model be exported.
 #' @param myqueue shinyQueue object. Multithreaded code use \link[future]{future} package. This object is used to send log messages to the base worker. See \link[ipc]{shinyQueue}.
@@ -289,7 +327,12 @@
 #' @export
 sumapc<-function(data, maxevts = 10000L, maxlvl = 3L, minpts = 100L, clust_options = list(method = "sdbscan", mineps = 1, mindens = 0.1, bw = 0.05, nbins = 5, mvpratio = 0.5), multi_thread = TRUE, fast_sgd = TRUE, ret_model = FALSE, myqueue = NULL, verbose = FALSE, use_cuml = FALSE, seed = NULL, ...) {
   if (!is.null(seed)) if (!is.numeric(seed)) stop("Seed must be a integer", call. = F)
-  if (!use_cuml && multi_thread && !("package:future" %in% search())) stop("future package needed for multi_thread work. Try library(future).", call. = F)
+  if (!use_cuml) {
+    if (multi_thread && !("package:future" %in% search())) {
+      cat("Future package needed for parallel clustering. Functionality disabled. Try library(future).\n")
+      use_futures<-FALSE
+    } else use_futures<-TRUE
+  }
   if (ret_model) {
     if (!(clust_options$method %in% c("sdbscan", "kdbscan"))) stop("ret_model needs sdbscan or kdbscan clustering method!", call. = F)
   }
@@ -300,7 +343,7 @@ sumapc<-function(data, maxevts = 10000L, maxlvl = 3L, minpts = 100L, clust_optio
     } else stop("Reticulate package is needed for cuml interface! Set use_cuml = F to disable cuml acceleration.", call. = F)
     clusters<-.cuml_sumapc(data = data, maxevts = maxevts, maxlvl = maxlvl, minpts = minpts, clust_options = clust_options, ret_model = ret_model, myqueue = myqueue, verbose = verbose, cuml = cuml, seed = seed, ...)
   } else {
-    clusters<-.sumapc(data = data, maxevts = maxevts, maxlvl = maxlvl, minpts = minpts, clust_options = clust_options, multi_thread = multi_thread, fast_sgd = fast_sgd, ret_model = ret_model, myqueue = myqueue, verbose = verbose, seed = seed, ...)
+    clusters<-.sumapc(data = data, maxevts = maxevts, maxlvl = maxlvl, minpts = minpts, clust_options = clust_options, multi_thread = multi_thread, use_futures = use_futures, fast_sgd = fast_sgd, ret_model = ret_model, myqueue = myqueue, verbose = verbose, seed = seed, ...)
   }
   if (ret_model) {
     clusters_model<-clusters$model
