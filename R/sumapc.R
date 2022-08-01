@@ -395,8 +395,10 @@ sumapc<-function(data, maxevts = 10000L, transform_maxevts = 1000000L, maxlvl = 
     c<-c
     if (length(model[[c]]$s2dcluster_model$clusters) == 1 || is.null(model[[c]]$s2dcluster_model)) next
     idxs<-clust == c
-    nclust<-.sumapc_newdata(x[idxs,], model[[c]], multi_thread = multi_thread, verbose = verbose)
-    clust[idxs]<-nclust
+    if (nrow(x[idxs, , drop = F]) > 0) {
+      nclust<-.sumapc_newdata(x[idxs, , drop = F], model[[c]], multi_thread = multi_thread, verbose = verbose)
+      clust[idxs]<-nclust
+    }
   }
   return(clust)
 }
@@ -405,13 +407,14 @@ sumapc<-function(data, maxevts = 10000L, transform_maxevts = 1000000L, maxlvl = 
 #'
 #' @param object sumapc model.
 #' @param newdata a data matrix.
+#' @param batch integer. Split newdata in small batches reducing memory usage.
 #' @param multi_thread logical.
 #' @param verbose logical.
 #' @param ... NOT USED.
 #'
 #' @return A vector of cluster numbers with length = nrow(data)
 #' @export
-predict.sumapc<-function(object, newdata, multi_thread = TRUE, verbose = FALSE, ...) {
+predict.sumapc<-function(object, newdata, batch = Inf, multi_thread = TRUE, verbose = FALSE, ...) {
   if (!inherits(object, "sumapc")) stop("object must be a sumapc result object!", call. = F)
   if (!is.matrix(newdata) || ncol(newdata) != object$model$data_columns || nrow(newdata) < 1) stop(paste0("newdata must be a matrix with ", object$model$data_columns, " columns and >0 rows!"), call. = F)
   if (object$model$cuml) {
@@ -422,7 +425,20 @@ predict.sumapc<-function(object, newdata, multi_thread = TRUE, verbose = FALSE, 
   }
   cluster<-c()
   if (length(object$clusters) > 1) {
-    cluster<-.sumapc_newdata(newdata, object$model, multi_thread = multi_thread, verbose = verbose)
+    if (nrow(newdata) > batch) {
+      totalL <- nrow(newdata)
+      cluster <- vector("character", length = totalL)
+      startL <- 1
+      endL <- 1
+      while (endL < totalL) {
+        endL <- (startL + batch - 1)
+        if (endL > totalL) endL<-totalL
+        cluster[startL:endL]<-.sumapc_newdata(newdata[startL:endL,], object$model, multi_thread = multi_thread, verbose = verbose)
+        startL <- (endL + 1)
+      }
+    } else {
+      cluster<-.sumapc_newdata(newdata, object$model, multi_thread = multi_thread, verbose = verbose)
+    }
   } else cluster<-rep("cluster", nrow(newdata))
   clusters<-unname(object$clusters[cluster])
   return(clusters)

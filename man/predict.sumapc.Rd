@@ -4,12 +4,21 @@
 \alias{predict.sumapc}
 \title{Predict clusters based on a sumapc model}
 \usage{
-\method{predict}{sumapc}(object, newdata, multi_thread = TRUE, verbose = FALSE, ...)
+\method{predict}{sumapc}(
+  object,
+  newdata,
+  batch = Inf,
+  multi_thread = TRUE,
+  verbose = FALSE,
+  ...
+)
 }
 \arguments{
 \item{object}{sumapc model.}
 
 \item{newdata}{a data matrix.}
+
+\item{batch}{integer. Split newdata in small batches reducing memory usage.}
 
 \item{multi_thread}{logical.}
 

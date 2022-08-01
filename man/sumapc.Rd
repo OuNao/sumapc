@@ -7,6 +7,7 @@
 sumapc(
   data,
   maxevts = 10000L,
+  transform_maxevts = 1000000L,
   maxlvl = 3L,
   minpts = 100L,
   clust_options = list(method = "sdbscan", mineps = 1, mindens = 0.1, bw = 0.05, nbins
@@ -26,13 +27,15 @@ sumapc(
 
 \item{maxevts}{max number of random points to apply UMAP.}
 
+\item{transform_maxevts}{max number of points to apply UMAP transform. The points not used in the initial UMAP model are divided in batches of transform_maxevts points to apply UMAP transform. Lower value = lower memory usage.}
+
 \item{maxlvl}{max sequential levels to process.}
 
 \item{minpts}{min cluster size.}
 
 \item{clust_options}{list; 2d clustering options (see Details).}
 
-\item{multi_thread}{logical. Needs \link[future]{future} package loaded and multisession plan selected.}
+\item{multi_thread}{logical. Needs \link[future]{future} package loaded and multisession plan selected to use parallel clustering (not only multithreading in UMAP). Only used if use_cuml = FALSE.}
 
 \item{fast_sgd}{logical; see \link[uwot]{umap}.}
 
