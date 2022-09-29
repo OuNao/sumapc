@@ -177,8 +177,11 @@
     knn_needed<-T
   } else datasample<-1:nrow(data[idxs,])
   # UMAP modeling
-  if (!is.null(seed)) random_state = as.integer(seed) else random_state = "None"
-  umap_model<-cuml$UMAP(n_epochs = 500L, random_state = random_state, verbose = verbose, ...)$fit(data[idxs,][datasample,])
+  if (!is.null(seed)) {
+    umap_model<-cuml$UMAP(n_epochs = 500L, random_state = as.integer(seed), verbose = verbose, ...)$fit(data[idxs,][datasample,])
+  } else {
+    umap_model<-cuml$UMAP(n_epochs = 500L, verbose = verbose, ...)$fit(data[idxs,][datasample,])
+  }
   embdata<-umap_model$embedding_
   # clustering UMAP embedding
   clust_options_bak<-clust_options
