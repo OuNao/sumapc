@@ -475,16 +475,53 @@ save_model<-function(res, file) {
   } else {
     file.remove(file)
   }
-  dir<-dirname(file)
-  filename<-sub("([^.]+)\\.[[:alnum:]]+$", "\\1", basename(file))
-  modeldir<-paste0(filename, "_models")
+  dir<-tempfile()
+  output<-tempfile()
+  modeldir<-file.path(dir, "sumapc")
+  modelfilesdir<-file.path(modeldir, "modelfiles")
+  dir.create(dir)
+  dir.create(modeldir)
+  dir.create(modelfilesdir)
+  olddir<-getwd()
+  setwd(modeldir)
+  res$model<-.save_model(res$model, "modelfiles")
+  saveRDS(res, file.path(modeldir, "model"))
+  utils::tar(tarfile = output)
+  setwd(olddir)
+  file.copy(output, file, overwrite = T)
+  unlink(dir)
+  unlink(output)
+  return(invisible(res))
+}
+
+.normalize_model_paths<-function(model, dir) {
+  modelfile<-file.path(dir, model$umap_file)
+  model$umap_file<-modelfile
+  for (i in paste0(model$cluster, "_", model$s2dcluster_model$clusters)) {
+    if (!is.null(model[[i]]$umap_file)) {
+      model[[i]]<-.normalize_model_paths(model[[i]], dir)
+    }
+  }
+  return(model)
+}
+
+#' Load sumapc model from file
+#'
+#' @param file filename.
+#'
+#' @export
+load_model<-function(file) {
+  if (!file.exists(file)) stop(sprintf("Cannot open %s!", file), call. = F)
+  file<-normalizePath(file)
+  dir<-tempfile()
+  dir.create(dir)
   olddir<-getwd()
   setwd(dir)
-  dir.create(modeldir)
-  res$model<-.save_model(res$model, modeldir)
-  saveRDS(res, file)
+  utils::untar(file)
+  model<-readRDS("model")
+  model$model<-.normalize_model_paths(model$model, dir)
   setwd(olddir)
-  return(invisible(res))
+  return(model)
 }
 
 .plot.sumapc_model<-function(model, data, ...) {
